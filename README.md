@@ -38,8 +38,6 @@ This package is already installed in your Laravel application.
 ### Deployment
 
 ```bash
-# Open Laragon Terminal
-cd c:\Local_Disk_N_2620251648\laragon\www\mdxplaygrnd
 
 # Clear caches
 php artisan cache:clear
