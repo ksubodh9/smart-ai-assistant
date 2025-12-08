@@ -8,6 +8,7 @@ use Subodh\SmartAiAssistant\Models\ErrorDefinition;
 use Subodh\SmartAiAssistant\Models\Conversation;
 use Subodh\SmartAiAssistant\Models\Message;
 use Cartalyst\Sentinel\Laravel\Facades\Sentinel;
+use Subodh\SmartAiAssistant\Support\ErrorMatcher;
 
 class ErrorHelpController extends Controller
 {
@@ -28,10 +29,9 @@ class ErrorHelpController extends Controller
         $pageUrl   = $validated['page_url'] ?? null;
         $service   = config('smart-ai-assistant.default_service', 'AEPS');
 
-        // Simple KB lookup – naive LIKE on the beginning of the key_text
-        $definition = ErrorDefinition::where('service', $service)
-            ->where('key_text', 'LIKE', "%{$errorText}%")
-            ->first();
+        // Use ErrorMatcher for substring-based KB matching
+        $errorMatcher = app(ErrorMatcher::class);
+        $definition = $errorMatcher->findMatchingDefinition($service, $errorText);
         // Create a conversation record
         $conversation = Conversation::create([
             'user_id' => Sentinel::check() ? Sentinel::getUser()->id : null,

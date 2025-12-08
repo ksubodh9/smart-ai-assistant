@@ -37,38 +37,8 @@ class SmartAssistant {
         }
     }
 
-    async scanForErrors() {
-        const errorSelectors = [
-            '.alert-danger',
-            '.invalid-feedback',
-            '.text-danger',
-            '.smart-error'
-        ];
-
-        const foundErrors = [];
-        const seenErrors = new Set();
-
-        errorSelectors.forEach(selector => {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(el => {
-                const errorText = el.innerText.trim();
-                if (errorText && errorText.length > 0 && errorText.length < 200) {
-                    // Avoid duplicates
-                    if (!seenErrors.has(errorText)) {
-                        seenErrors.add(errorText);
-                        foundErrors.push(errorText);
-                    }
-                }
-            });
-        });
-
-        if (foundErrors.length > 0) {
-            this.uiManager.renderErrorTags(foundErrors);
-        } else {
-            this.uiManager.setStatus('No errors detected. How can I help you?');
-            this.uiManager.showChatInput();
-        }
-    }
+    // Note: Error scanning is now handled by MutationObserver in UIManager
+    // This detects only NEW errors that appear after user activity
 
     async handleErrorQuery(errorText) {
         this.currentErrorContext = errorText;
@@ -102,33 +72,43 @@ class SmartAssistant {
             }
 
             this.uiManager.addChatMessage(responseHtml, false);
-            this.uiManager.setStatus('');
+            this.uiManager.setStatus('Ready to help');
 
             // If unknown error, suggest manual query
             if (data.source === 'unknown') {
                 setTimeout(() => {
                     this.uiManager.addChatMessage(
-                        'If you need more help, feel free to ask me anything or attach a screenshot.',
+                        'If you need more help, feel free to type your question below or attach a screenshot.',
                         false
                     );
                 }, 500);
             }
         } else if (result.error === 'network_error') {
-            this.uiManager.hideTypingIndicator();
             this.uiManager.showNetworkError();
             this.uiManager.setStatus('Network error');
         } else {
-            this.uiManager.hideTypingIndicator();
             this.uiManager.showParseError();
             this.uiManager.setStatus('Error occurred');
         }
+
+        // IMPORTANT: Ensure chat input is enabled after response
+        // Call multiple times to override any external disabling
+        this.uiManager.enableChatInput();
+        setTimeout(() => {
+            this.uiManager.enableChatInput();
+            if (this.chatInput) this.chatInput.focus();
+        }, 100);
+        setTimeout(() => {
+            this.uiManager.enableChatInput();
+            if (this.chatInput) this.chatInput.focus();
+        }, 500);
     }
 
     async handleSendMessage() {
         const message = this.chatInput?.value.trim();
-        const file = this.filePreviewManager.getFile();
+        const attachments = this.filePreviewManager.getAttachments();
 
-        if (!message && !file) {
+        if (!message && attachments.length === 0) {
             return;
         }
 
@@ -138,7 +118,13 @@ class SmartAssistant {
         }
 
         // Show user message
-        let userMessageText = message || '📎 Sent an attachment';
+        let userMessageText = message || '';
+        if (attachments.length > 0) {
+            const attachmentTypes = [];
+            if (this.filePreviewManager.getFile()) attachmentTypes.push('📎 file');
+            if (this.filePreviewManager.getScreenshot()) attachmentTypes.push('📷 screenshot');
+            userMessageText = userMessageText || `Sent ${attachmentTypes.join(' & ')}`;
+        }
         this.uiManager.addChatMessage(userMessageText, true);
 
         // Clear input
@@ -156,7 +142,7 @@ class SmartAssistant {
 
         const result = await this.apiManager.sendChatMessage(
             message,
-            file,
+            attachments,
             this.currentErrorContext
         );
 
@@ -190,10 +176,15 @@ class SmartAssistant {
             this.uiManager.setStatus('Send failed');
         }
 
-        // Re-enable send button
+        // Re-enable send button and chat input
         if (this.sendBtn) {
             this.sendBtn.disabled = false;
         }
+
+        // Call enableChatInput multiple times to ensure it stays enabled
+        this.uiManager.enableChatInput();
+        setTimeout(() => this.uiManager.enableChatInput(), 100);
+        setTimeout(() => this.uiManager.enableChatInput(), 300);
     }
 }
 

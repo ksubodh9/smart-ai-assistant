@@ -46,15 +46,26 @@
             <!-- File Preview -->
             <div id="sa-file-preview"></div>
 
+            <!-- Screenshot Preview -->
+            <div id="sa-screenshot-preview"></div>
+
         </div>
 
         <!-- Chat Input Bar -->
         <div id="sa-chat-input-bar">
             <div class="sa-input-wrapper">
                 <!-- Attachment Button -->
-                <button id="sa-attach-btn" type="button" aria-label="Attach file">
+                <button id="sa-attach-btn" type="button" aria-label="Attach file" title="Attach file">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                    </svg>
+                </button>
+
+                <!-- Screenshot Button -->
+                <button id="sa-screenshot-btn" type="button" aria-label="Take screenshot" title="Capture screenshot">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
                     </svg>
                 </button>
 
@@ -97,8 +108,12 @@
 <!-- Load CSS -->
 <link rel="stylesheet" href="{{ asset('vendor/smart-ai-assistant/css/assistant.css') }}">
 
+<!-- Load html2canvas for screenshot capture -->
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 <!-- Load JavaScript Modules -->
 <script src="{{ asset('vendor/smart-ai-assistant/js/ui-manager.js') }}"></script>
 <script src="{{ asset('vendor/smart-ai-assistant/js/api-manager.js') }}"></script>
 <script src="{{ asset('vendor/smart-ai-assistant/js/file-preview.js') }}"></script>
 <script src="{{ asset('vendor/smart-ai-assistant/js/assistant.js') }}"></script>
+

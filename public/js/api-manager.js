@@ -50,7 +50,7 @@ class APIManager {
         }
     }
 
-    async sendChatMessage(message, file = null, errorContext = null) {
+    async sendChatMessage(message, attachments = [], errorContext = null) {
         try {
             const userData = this.getUserData();
 
@@ -67,37 +67,59 @@ class APIManager {
             formData.append('maddox_id', userData.maddoxId);
             formData.append('name', userData.name);
             formData.append('alternate_phone_no', userData.phone);
-            formData.append('service', 99);
+            formData.append('service', '99');
             formData.append('other', 'Smart Assistant Query');
             formData.append('category', 'Smart Assistant');
 
             // Include error context if available
-            let description = message;
+            let description = message || '';
             if (errorContext) {
-                description = `Error Context: ${errorContext}\n\nUser Query: ${message}`;
+                description = `Error Context: ${errorContext}\n\nUser Query: ${message || 'See attached file'}`;
+            }
+            if (!description && attachments.length > 0) {
+                description = 'See attached file(s)';
             }
             formData.append('description', description);
 
-            if (file) {
-                formData.append('attachment', file);
+            // Append all attachments (file + screenshot)
+            // Use 'file[]' as the field name to match Laravel validation
+            if (Array.isArray(attachments)) {
+                attachments.forEach(file => {
+                    if (file) {
+                        formData.append('file[]', file, file.name);
+                    }
+                });
+            } else if (attachments) {
+                // For backward compatibility - single file
+                formData.append('file[]', attachments, attachments.name);
             }
 
             const response = await fetch(this.endpoints.ticket, {
                 method: 'POST',
                 headers: {
-                    'X-CSRF-TOKEN': this.csrfToken
+                    'X-CSRF-TOKEN': this.csrfToken,
+                    'Accept': 'application/json'
                 },
                 body: formData
             });
 
             const text = await response.text();
-            const json = JSON.parse(text);
 
-            return {
-                success: response.ok,
-                data: json,
-                message: json.message
-            };
+            try {
+                const json = JSON.parse(text);
+                return {
+                    success: response.ok,
+                    data: json,
+                    message: json.message
+                };
+            } catch (parseError) {
+                console.error('JSON Parse Error:', parseError, 'Raw:', text);
+                return {
+                    success: false,
+                    error: 'parse_error',
+                    message: 'Server returned an invalid response.'
+                };
+            }
         } catch (error) {
             console.error('Send Message Error:', error);
             return {
