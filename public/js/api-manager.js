@@ -98,7 +98,8 @@ class APIManager {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': this.csrfToken,
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: formData
             });

@@ -8,7 +8,7 @@
     position: fixed;
     bottom: 30px;
     right: 30px;
-    z-index: 2147483647;
+    z-index: 999000;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
 }
 
@@ -78,7 +78,7 @@
 #smart-assistant-panel.sa-panel-open {
     opacity: 1;
     transform: translateY(0) scale(1);
-    pointer-events: all;
+    pointer-events: auto;
 }
 
 /* ===== HEADER ===== */
@@ -604,7 +604,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 20000;
+    z-index: 999999;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -612,7 +612,7 @@
 
 .sa-fullscreen-modal.sa-modal-open {
     opacity: 1;
-    pointer-events: all;
+    pointer-events: auto;
 }
 
 .sa-fullscreen-overlay {
@@ -883,4 +883,88 @@
     to {
         opacity: 1;
     }
+}@
+
+/* ===== NOTIFICATION BADGE ===== */
+.sa-notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #e53e3e;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 10;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(0);
 }
+
+.sa-notification-badge.sa-badge-visible {
+    transform: scale(1);
+}
+
+/* ===== NOTIFICATION TOAST ===== */
+.sa-notification-toast {
+    position: absolute;
+    bottom: 80px;
+    right: 0;
+    background: white;
+    color: #2d3748;
+    padding: 12px 16px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 4px solid #e53e3e;
+}
+
+.sa-notification-toast.sa-toast-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.sa-notification-toast::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    right: 24px;
+    width: 12px;
+    height: 12px;
+    background: white;
+    transform: rotate(45deg);
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+}
+
+/* ===== PULSE ANIMATION ===== */
+@keyframes sa-pulse-red {
+    0% {
+        box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(229, 62, 62, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(229, 62, 62, 0);
+    }
+}
+
+.sa-pulse-animation {
+    animation: sa-pulse-red 2s infinite;
+}
+@
