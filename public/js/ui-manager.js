@@ -136,42 +136,46 @@ class UIManager {
         const chatInput = document.getElementById('smart-assistant-chat-input');
         if (!widget) return;
 
-        // Stop Bootstrap from intercepting focus events on our widget
+        // Stop propagation in BUBBLE phase (false)
+        // This allows events to execute on the element first (focus, typing, cursor placement)
+        // AND THEN stops them from reaching document/bootstrap
+
+        // Prevent Bootstrap from checking focusin
         widget.addEventListener('focusin', (e) => {
             e.stopPropagation();
-            e.stopImmediatePropagation();
-        }, true);
+            // Do not stop immediate propagation, let other widget listeners run
+        });
 
         widget.addEventListener('focus', (e) => {
             e.stopPropagation();
-            e.stopImmediatePropagation();
-        }, true);
+        });
 
-        // Handle click events - ensure they work inside our widget when modal is open
+        // Handle click/mousedown events
+        // Allow native interaction (cursor placement, text selection) then stop bubbling
         widget.addEventListener('mousedown', (e) => {
             e.stopPropagation();
-            e.stopImmediatePropagation();
 
-            // If clicking on the input, directly focus it
-            if (e.target.id === 'smart-assistant-chat-input' ||
-                e.target.closest('#smart-assistant-chat-input')) {
-                setTimeout(() => {
-                    const input = document.getElementById('smart-assistant-chat-input');
-                    if (input) {
-                        input.focus();
-                        this.forceEnableInput();
-                    }
-                }, 0);
+            // Ensure input gets focus if needed (backup)
+            if (e.target.id === 'smart-assistant-chat-input' || e.target.closest('#smart-assistant-chat-input')) {
+                // We rely on native behavior now, but ensure it's enabled
+                this.forceEnableInput();
             }
-        }, true);
+        });
+
+        widget.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        widget.addEventListener('mouseup', (e) => {
+            e.stopPropagation();
+        });
 
         // Prevent Bootstrap's focusout handler from taking focus away
         widget.addEventListener('focusout', (e) => {
             if (this.panel?.classList.contains('sa-panel-open')) {
                 e.stopPropagation();
-                e.stopImmediatePropagation();
             }
-        }, true);
+        });
 
         // SPECIFIC TEXTAREA HANDLING
         // Textareas need special handling because they require establishing a text cursor
@@ -200,7 +204,6 @@ class UIManager {
             // When clicking the textarea, aggressively maintain focus
             chatInput.addEventListener('click', (e) => {
                 e.stopPropagation();
-                e.stopImmediatePropagation();
 
                 // Force focus back after any potential Bootstrap interference
                 setTimeout(() => chatInput.focus(), 0);
@@ -209,7 +212,6 @@ class UIManager {
             // When textarea receives focus, prevent Bootstrap from stealing it
             chatInput.addEventListener('focus', (e) => {
                 e.stopPropagation();
-                e.stopImmediatePropagation();
 
                 // Add a temporary listener to block any blur attempts
                 const preventBlur = (blurEvent) => {
@@ -235,22 +237,22 @@ class UIManager {
                 }, 100);
             });
 
-            // Add keyboard event handling so typing works
+            // Add keyboard event handling so typing works (stop bubbling to document)
             chatInput.addEventListener('keydown', (e) => {
                 e.stopPropagation();
-            }, true);
+            });
 
             chatInput.addEventListener('keyup', (e) => {
                 e.stopPropagation();
-            }, true);
+            });
 
             chatInput.addEventListener('keypress', (e) => {
                 e.stopPropagation();
-            }, true);
+            });
 
             chatInput.addEventListener('input', (e) => {
                 e.stopPropagation();
-            }, true);
+            });
         }
 
         // Override Bootstrap's enforceFocus if it exists
@@ -417,10 +419,36 @@ class UIManager {
 
         this.showWelcomeMessage();
 
-        // Ensure input is enabled immediately
-        this.forceEnableInput();
+        // Cleanup any stale screenshot overlays
+        const staleOverlays = document.querySelectorAll('.sa-selection-overlay');
+        staleOverlays.forEach(el => el.remove());
 
-        // Scan for errors after a brief delay and ensure focus
+        // FOCUS INPUT with delay
+        setTimeout(() => {
+            if (this.chatInput) {
+                this.chatInput.focus();
+                this.forceEnableInput();
+
+                // DEBUGGING LOGS
+                console.log('Smart Assistant Opened');
+                console.log('Active Element:', document.activeElement);
+
+                const rect = this.chatInput.getBoundingClientRect();
+                const centerElement = document.elementFromPoint(
+                    rect.left + rect.width / 2,
+                    rect.top + rect.height / 2
+                );
+                console.log('Element at Input Center:', centerElement);
+                console.log('Input State:', {
+                    disabled: this.chatInput.disabled,
+                    readOnly: this.chatInput.readOnly,
+                    pointerEvents: window.getComputedStyle(this.chatInput).pointerEvents,
+                    zIndex: window.getComputedStyle(this.chatInput).zIndex
+                });
+            }
+        }, 100);
+
+        // Scan for errors after a brief delay
         setTimeout(() => {
             this.scanForErrors();
 
