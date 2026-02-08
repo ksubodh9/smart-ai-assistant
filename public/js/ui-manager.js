@@ -18,13 +18,54 @@ class UIManager {
         this.chatInputBar = document.getElementById('sa-chat-input-bar');
         this.selectedErrorTag = null;
 
+        // Error Monitoring
+        this.previousErrors = new Set();
+        this.errorCheckInterval = null;
+
         // Flag to keep input enabled at all times after first interaction
         this.keepInputActive = false;
 
         // Setup input protection observer
         this.setupInputProtection();
 
+        // Setup proactive error monitoring
+        this.setupErrorMonitoring();
+
         this.initEventListeners();
+
+        // Initialize Notification Elements
+        this.createNotificationElements();
+    }
+
+    /**
+     * Create the localized notification elements (Badge and Toast)
+     */
+    createNotificationElements() {
+        if (!this.toggleBtn) return;
+
+        // Create Badge
+        this.badge = document.createElement('div');
+        this.badge.className = 'sa-notification-badge';
+        this.toggleBtn.appendChild(this.badge);
+
+        // Create Notification Popup Card
+        this.notificationPopup = document.createElement('div');
+        this.notificationPopup.className = 'sa-notification-popup';
+        this.notificationPopup.innerHTML = '<span>⚠️ Issues detected - Click to view</span>';
+        this.notificationPopup.style.cursor = 'pointer';
+        this.notificationPopup.addEventListener('click', () => this.togglePanel());
+
+        // Create Toast
+        this.toast = document.createElement('div');
+        this.toast.className = 'sa-notification-toast';
+        this.toast.innerHTML = '<span>⚠️ Issues found</span>';
+
+        // Append to the widget container
+        const widget = document.getElementById('smart-assistant-widget');
+        if (widget) {
+            widget.appendChild(this.notificationPopup);
+            widget.appendChild(this.toast);
+        }
     }
 
     /**
@@ -151,6 +192,19 @@ class UIManager {
                 }, true);
             });
 
+            // Aggressive mousedown handler to prevent focus stealing
+            chatInput.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                // We don't preventDefault here because we want the text cursor to be placed normally
+                // But we aggressively ensure focus is ours
+
+                setTimeout(() => {
+                    this.forceEnableInput();
+                    chatInput.focus();
+                }, 0);
+                setTimeout(() => chatInput.focus(), 50);
+            }, true);
+
             // When clicking the textarea, aggressively maintain focus
             chatInput.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -158,8 +212,6 @@ class UIManager {
 
                 // Force focus back after any potential Bootstrap interference
                 setTimeout(() => chatInput.focus(), 0);
-                setTimeout(() => chatInput.focus(), 10);
-                setTimeout(() => chatInput.focus(), 50);
             });
 
             // When textarea receives focus, prevent Bootstrap from stealing it
@@ -224,53 +276,83 @@ class UIManager {
     /**
      * Disable Bootstrap's focus trap when our widget is active
      */
+    /**
+     * Disable Bootstrap's focus trap when our widget is active
+     */
     disableBootstrapFocusTrap() {
-        // For Bootstrap 5
+        const widget = document.getElementById('smart-assistant-widget');
+
+        // STRATEGY 1: Bootstrap 4 Global Prototype Patch
+        // This fixes it for ALL modals, present and future
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal && window.jQuery.fn.modal.Constructor) {
+            const Constructor = window.jQuery.fn.modal.Constructor;
+
+            // Check if we already patted it
+            if (!Constructor.prototype.saPatched) {
+                const originalEnforceFocus = Constructor.prototype._enforceFocus;
+
+                Constructor.prototype._enforceFocus = function () {
+                    // This is the Bootstrap 4 logic, modified to allow our widget
+                    const $ = window.jQuery;
+                    const that = this;
+                    $(document)
+                        .off('focusin.bs.modal') // Turn off existing
+                        .on('focusin.bs.modal', function (e) {
+                            if (
+                                document === e.target ||
+                                that._element === e.target ||
+                                $(that._element).has(e.target).length ||
+                                // OUR FIX: Allow focus if it's inside our widget
+                                (widget && widget.contains(e.target))
+                            ) {
+                                return;
+                            }
+                            that._element.focus();
+                        });
+                };
+                Constructor.prototype.saPatched = true;
+                console.log('Smart Assistant: Applied global Bootstrap 4 focus fix');
+            }
+        }
+
+        // STRATEGY 2: Bootstrap 5 Instance Patching
+        // We have to do this per-instance as they are created
         const modals = document.querySelectorAll('.modal.show');
         modals.forEach(modal => {
-            // Get Bootstrap modal instance
             const bsModal = window.bootstrap?.Modal?.getInstance(modal);
-            if (bsModal && bsModal._focustrap) {
-                // Store original handler
+            if (bsModal && bsModal._focustrap && !bsModal._focustrap.saPatched) {
                 const originalTrap = bsModal._focustrap._handleFocusin;
-
-                // Override to allow focus in our widget
                 bsModal._focustrap._handleFocusin = (event) => {
-                    const widget = document.getElementById('smart-assistant-widget');
                     if (widget && widget.contains(event.target)) {
-                        // Allow focus in our widget
                         return;
                     }
-                    // Otherwise use original behavior
-                    if (originalTrap) {
-                        originalTrap.call(bsModal._focustrap, event);
-                    }
+                    if (originalTrap) originalTrap.call(bsModal._focustrap, event);
                 };
+                bsModal._focustrap.saPatched = true;
+                console.log('Smart Assistant: Patched Bootstrap 5 modal instance');
             }
         });
 
-        // For Bootstrap 4 (jQuery-based)
+        // STRATEGY 3: jQuery Instance Patching (Fallback for BS4 instances already created)
         if (window.jQuery) {
             const $ = window.jQuery;
             $('.modal.show').each(function () {
-                const modal = $(this).data('bs.modal');
-                if (modal) {
-                    // Override enforceFocus for Bootstrap 4
-                    modal._enforceFocus = function () {
+                const modalData = $(this).data('bs.modal');
+                if (modalData && !modalData.saPatched) {
+                    const originalEnforceFocus = modalData._enforceFocus;
+                    modalData._enforceFocus = function () {
                         $(document)
                             .off('focusin.bs.modal')
                             .on('focusin.bs.modal', (e) => {
-                                const widget = document.getElementById('smart-assistant-widget');
-                                if (widget && widget.contains(e.target)) {
-                                    return; // Allow focus in our widget
-                                }
-                                if (this._element !== e.target &&
-                                    !$(this._element).has(e.target).length) {
+                                if (widget && widget.contains(e.target)) return;
+                                if (this._element !== e.target && !$(this._element).has(e.target).length) {
                                     this._element.focus();
                                 }
                             });
                     };
-                    modal._enforceFocus();
+                    // Re-run it to apply the new handler
+                    modalData._enforceFocus();
+                    modalData.saPatched = true;
                 }
             });
         }
@@ -326,12 +408,41 @@ class UIManager {
     }
 
     openPanel() {
+        console.log('Smart Assistant: Opening panel...');
+
+        // Safety: Remove any stuck overlays from previous screenshots
+        document.querySelectorAll('.sa-selection-overlay').forEach(el => el.remove());
+
+        // Ask for notification permission on first interaction
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+            Notification.requestPermission();
+        }
+
         this.panel.classList.add('sa-panel-open');
+
+        // Clear visual notifications when panel is opened
+        this.clearVisualNotifications();
+
         this.showWelcomeMessage();
 
-        // Scan for errors after a brief delay
+        // Ensure input is enabled immediately
+        this.forceEnableInput();
+
+        // Scan for errors after a brief delay and ensure focus
         setTimeout(() => {
             this.scanForErrors();
+
+            // Explicitly focus the chat input
+            if (this.chatInput) {
+                console.log('Smart Assistant: Forcing focus on input...');
+                this.chatInput.focus();
+
+                // Double check active element
+                if (document.activeElement !== this.chatInput) {
+                    console.warn('Smart Assistant: Input failed to focus. Active element:', document.activeElement);
+                    this.chatInput.focus();
+                }
+            }
         }, 300);
     }
 
@@ -351,52 +462,145 @@ class UIManager {
 
     // Scan for errors - IGNORES .invalid-feedback
     scanForErrors() {
-        // Selectors to scan (EXCLUDING .invalid-feedback)
-        const errorSelectors = [
-            '.alert-danger',
-            '.text-danger:not(.invalid-feedback)',  // Exclude invalid-feedback
-            '.smart-error',
-            '#modal_status_message',
-            '.error-message',
-            '.alert-warning'
-        ];
-
         const foundErrors = [];
         const seenErrors = new Set();
 
-        errorSelectors.forEach(selector => {
-            try {
-                const elements = document.querySelectorAll(selector);
-                elements.forEach(el => {
-                    // Skip if element is inside a form (likely validation message)
-                    if (el.closest('form') && el.classList.contains('text-danger')) {
-                        return;
-                    }
-
-                    // Skip .invalid-feedback elements
-                    if (el.classList.contains('invalid-feedback')) {
-                        return;
-                    }
-
-                    const errorText = el.innerText.trim();
-
-                    // Valid error: non-empty, reasonable length, not duplicate
-                    if (errorText &&
-                        errorText.length > 3 &&
-                        errorText.length < 300 &&
-                        !seenErrors.has(errorText)) {
+        // ===== Context-Aware Element Selection =====
+        
+        // Level 1: Explicit real error IDs (MUST be included)
+        const realErrorIds = ['modal_error', 'modal_status_message', 'error-display'];
+        realErrorIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const errorText = el.innerText?.trim();
+                if (errorText && errorText.length > 3 && errorText.length < 300) {
+                    if (!seenErrors.has(errorText)) {
                         seenErrors.add(errorText);
                         foundErrors.push(errorText);
                     }
-                });
-            } catch (e) {
-                console.warn('Error scanning selector:', selector, e);
+                }
             }
         });
 
+        // Level 2: Alert boxes (high confidence errors)
+        const alertDangers = document.querySelectorAll('.alert-danger');
+        alertDangers.forEach(el => {
+            const errorText = el.innerText?.trim();
+            if (errorText && errorText.length > 3 && errorText.length < 300) {
+                if (!seenErrors.has(errorText)) {
+                    seenErrors.add(errorText);
+                    foundErrors.push(errorText);
+                }
+            }
+        });
+
+        // Level 3: Text-danger elements (with smart filtering)
+        const textDangers = document.querySelectorAll('.text-danger');
+        textDangers.forEach(el => {
+            // Skip if marked as placeholder
+            if (el.getAttribute('data-error-type') === 'placeholder') {
+                return;
+            }
+
+            // Skip if it's form validation
+            if (el.classList.contains('invalid-feedback') || el.classList.contains('help-block')) {
+                return;
+            }
+
+            // Skip if inside a form (likely validation message)
+            if (el.closest('form')) {
+                return;
+            }
+
+            // Skip elements with placeholder classes
+            if (el.classList.contains('loader-text') || 
+                el.classList.contains('loading-message') ||
+                el.classList.contains('placeholder') ||
+                el.classList.contains('responseMessage')) {
+                return;
+            }
+
+            // Skip known placeholder IDs
+            const elemId = el.getAttribute('id');
+            if (elemId && ['status', 'loading-message', 'loader-text', 'message'].includes(elemId)) {
+                return;
+            }
+
+            // Skip if parent is a modal body with empty content
+            const modalParent = el.closest('.modal-body');
+            if (modalParent && el.getAttribute('id') !== 'modal_error') {
+                // If it's empty or just placeholder text, skip it
+                const text = el.innerText?.trim();
+                if (!text || /^(transaction status|loading|please wait|processing)$/i.test(text)) {
+                    return;
+                }
+            }
+
+            const errorText = el.innerText?.trim();
+
+            // Validate error text
+            if (!errorText || errorText.length < 3 || errorText.length > 300) {
+                return;
+            }
+
+            // Skip common placeholder patterns
+            if (/^(transaction\s+status|loading\.\.*|please\s+wait|processing|capturing|fingerprint|balance|withdrawal|deposit|statement|abbreviation|your\s+device)$/i.test(errorText)) {
+                return;
+            }
+
+            // Avoid duplicates
+            if (seenErrors.has(errorText)) {
+                return;
+            }
+
+            seenErrors.add(errorText);
+            foundErrors.push(errorText);
+        });
+
+        // ---------------------------------------------------------
+        // ALERT SYSTEM LOGIC
+        // ---------------------------------------------------------
+
+        // Identify NEW errors by checking against previous set
+        const newDetectedErrors = [];
+        const currentErrorSet = new Set(foundErrors);
+
+        foundErrors.forEach(errorText => {
+            if (!this.previousErrors.has(errorText)) {
+                newDetectedErrors.push(errorText);
+            }
+        });
+
+        // Update previous errors state
+        this.previousErrors = currentErrorSet;
+
+        // Trigger Alert if new errors found
+        if (newDetectedErrors.length > 0) {
+            console.log(`Smart Assistant: ${newDetectedErrors.length} new error(s) detected.`, newDetectedErrors);
+
+            // 1. Play Sound
+            this.playAlertSound();
+
+            // 2. Show Notification (Classic Method)
+            this.showSystemNotification(newDetectedErrors.length);
+
+            // 3. Show Visual Cues (Badge + Toast) - ONLY if panel is closed
+            if (!this.panel.classList.contains('sa-panel-open')) {
+                this.updateVisualNotifications(newDetectedErrors.length, foundErrors.length);
+            }
+        }
+
+        // ---------------------------------------------------------
+
         if (foundErrors.length > 0) {
             this.renderErrorTags(foundErrors);
+
+            // Ensure badge is correct if we missed an update
+            if (!this.panel.classList.contains('sa-panel-open')) {
+                this.updateBadge(foundErrors.length);
+            }
         } else {
+            this.clearVisualNotifications();
             this.setStatus('How can I help you today?');
         }
 
@@ -514,7 +718,16 @@ class UIManager {
 
     scrollChatToBottom() {
         if (this.chatContainer) {
-            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+            // Get the parent scrollable container (.sa-content)
+            const contentArea = this.chatContainer.closest('.sa-content') || this.chatContainer.parentElement;
+            if (contentArea) {
+                setTimeout(() => {
+                    contentArea.scrollTo({
+                        top: contentArea.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }, 50);
+            }
         }
     }
 
@@ -574,6 +787,156 @@ class UIManager {
             false,
             true
         );
+    }
+
+    /**
+     * Setup continuous monitoring for errors on the page
+     */
+    setupErrorMonitoring() {
+        // Only start monitoring after page is fully loaded to avoid catching temporary placeholder elements
+        const startMonitoring = () => {
+            // Use MutationObserver to detect DOM changes that might be errors
+            const observer = new MutationObserver((mutations) => {
+                let shouldScan = false;
+
+                mutations.forEach(mutation => {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        shouldScan = true;
+                    } else if (mutation.type === 'attributes' && (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
+                        shouldScan = true;
+                    }
+                });
+
+                if (shouldScan) {
+                    // Debounce scan
+                    if (this.errorCheckInterval) clearTimeout(this.errorCheckInterval);
+                    this.errorCheckInterval = setTimeout(() => this.scanForErrors(), 1000);
+                }
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'style']
+            });
+        };
+
+        // Wait for page load, then start monitoring
+        if (document.readyState === 'complete') {
+            startMonitoring();
+        } else {
+            window.addEventListener('load', startMonitoring);
+        }
+    }
+
+    /**
+     * Play a classic alert sound (Beep)
+     */
+    playAlertSound() {
+        try {
+            // Simple beep sound (Base64 encoded WAV)
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 880; // A5
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+
+            // Fade out
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+
+            oscillator.stop(audioCtx.currentTime + 0.5);
+
+        } catch (e) {
+            console.warn('AudioContext not supported or failed', e);
+        }
+    }
+
+    /**
+     * Show a system notification
+     * @param {number} count Number of errors
+     */
+    showSystemNotification(count) {
+        const title = 'Action Required';
+        const message = `${count} error${count > 1 ? 's were' : ' was'} detected`;
+
+        // Check if browser supports notifications
+        if (!("Notification" in window)) {
+            return;
+        }
+
+        // Check permission
+        if (Notification.permission === "granted") {
+            try {
+                new Notification(title, {
+                    body: message,
+                    icon: '/favicon.ico', // Optional: try to use favicon
+                    silent: true // We play our own sound
+                });
+            } catch (e) {
+                console.error("Notification failed", e);
+            }
+        }
+        // Note: we don't ask for permission here to avoid spamming. 
+        // Permission is requested in openPanel.
+    }
+    /**
+     * Update visual notifications (Badge, Pulse, Toast)
+     */
+    updateVisualNotifications(newCount, totalCount) {
+        // Update Badge
+        this.updateBadge(totalCount);
+
+        // Add pulse animation
+        if (this.toggleBtn) {
+            this.toggleBtn.classList.add('sa-pulse-animation');
+        }
+
+        // Show Notification Popup only
+        if (this.notificationPopup) {
+            this.notificationPopup.innerHTML = `<span>⚠️ ${totalCount} issue${totalCount > 1 ? 's' : ''} detected - Click to view</span>`;
+            this.notificationPopup.classList.add('sa-notification-popup-visible');
+
+            // Auto-hide after 6 seconds
+            if (this.notificationPopupTimeout) clearTimeout(this.notificationPopupTimeout);
+            this.notificationPopupTimeout = setTimeout(() => {
+                this.notificationPopup.classList.remove('sa-notification-popup-visible');
+            }, 6000);
+        }
+    }
+
+    updateBadge(count) {
+        if (this.badge) {
+            if (count > 0) {
+                this.badge.textContent = count > 9 ? '9+' : count;
+                this.badge.classList.add('sa-badge-visible');
+            } else {
+                this.badge.classList.remove('sa-badge-visible');
+            }
+        }
+    }
+
+    clearVisualNotifications() {
+        // Clear Badge
+        if (this.badge) {
+            this.badge.classList.remove('sa-badge-visible');
+        }
+
+        // Remove Pulse
+        if (this.toggleBtn) {
+            this.toggleBtn.classList.remove('sa-pulse-animation');
+        }
+
+        // Hide Notification Popup
+        if (this.notificationPopup) {
+            this.notificationPopup.classList.remove('sa-notification-popup-visible');
+        }
     }
 }
 

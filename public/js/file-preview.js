@@ -93,6 +93,9 @@ class FilePreviewManager {
 
         this.previewContainer.appendChild(previewDiv);
         this.previewContainer.style.display = 'block';
+        
+        // Auto-scroll to show the preview
+        this.previewContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         const thumbnail = previewDiv.querySelector('.sa-file-thumbnail');
         const removeBtn = previewDiv.querySelector('.sa-file-remove');
@@ -509,6 +512,9 @@ class FilePreviewManager {
 
         this.screenshotPreviewContainer.appendChild(previewDiv);
         this.screenshotPreviewContainer.style.display = 'block';
+        
+        // Auto-scroll to show the screenshot preview
+        this.screenshotPreviewContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         const thumbnail = previewDiv.querySelector('.sa-screenshot-thumbnail');
         const removeBtn = previewDiv.querySelector('.sa-screenshot-remove');
