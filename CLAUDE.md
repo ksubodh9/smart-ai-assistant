@@ -32,7 +32,7 @@ composer install          # package-local vendor/ with orchestra/testbench + PHP
 vendor/bin/phpunit        # or: composer test
 ```
 
-Feature tests use a dedicated MySQL database, `smart_ai_assistant_test` (settings in `phpunit.xml`). It is wiped on every run. MySQL is used because `ErrorMatcher` uses MySQL-specific SQL. The tests are **characterization tests**: they pin current behaviour, and cases named `known_bug` / `known_gap` record wrong behaviour on purpose. When fixing one, update its expectation in the same commit. `tests/Stubs/Sentinel` is a test-only stand-in for the host's Sentinel facade.
+Feature tests use a dedicated MySQL database, `smart_ai_assistant_test` (settings in `phpunit.xml`). It is wiped on every run. MySQL is used because `ErrorMatcher` uses MySQL-specific SQL. The tests are **characterization tests**: they pin current behaviour, and cases named `known_bug` / `known_gap` record wrong behaviour on purpose. When fixing one, update its expectation in the same commit. `tests/Stubs/Sentinel` is a test-only stand-in for the host's Sentinel facade; only the widget view tests still need it. Test requests that depend on the session must send a session cookie with `withCredentials()->withCookie(...)`, because JSON test requests carry no cookies by default.
 
 The JavaScript has no automated tests. Frontend changes are still verified manually in the browser, using the checklist in README.md.
 
@@ -55,7 +55,8 @@ The behaviour rules (never loop, prompt only once, exit cleanly, abuse handling)
 
 ### Host-app coupling
 The package depends on things that `composer.json` does not declare:
-- **Cartalyst Sentinel** for auth. It is used in the controller and in the Blade view (`Sentinel::check()`, plus the `maddox_id`, `full_name`, and `phone_no` fields on the user).
+- **Identity** comes from the host through `Core\Contracts\UserContextResolver`, which returns a `Core\Data\UserContext`. The class is set in `config('smart-ai-assistant.user_resolver')`. The default, `Support\LaravelAuthUserContextResolver`, uses Laravel's auth guard. MaddoxPay sets `App\SmartAssistant\SentinelUserContextResolver` (host code). Package PHP in `src/` must not reference Sentinel; `tests/Unit/PackageBoundaryTest` enforces this. Never read identity from the request body.
+- **Temporary exception:** the package Blade view still reads Sentinel (guarded by `class_exists('Sentinel')`) to render hidden `maddox_id`/`full_name`/`phone_no` inputs for the host ticket endpoint. This goes away when escalation moves server-side (plan step 4).
 - A host-app route, **`POST /customer-support/raise/ticket`**, which receives chat messages and attachments as FormData.
 - A `<meta name="csrf-token">` tag in the host layout.
 - The widget loads no third-party scripts. html2canvas 1.4.1 (MIT), used for screenshot capture, is bundled at `public/js/vendor/html2canvas.min.js`. It is byte-identical to the npm release; its license is next to it.

@@ -95,8 +95,8 @@
             Powered by Maddox AI
         </div>
 
-        <!-- Hidden User Data for Chat -->
-        @if(Sentinel::check())
+        <!-- Hidden User Data for Chat (MaddoxPay ticket endpoint; temporary, removed when escalation moves server-side) -->
+        @if(class_exists('Sentinel') && Sentinel::check())
             @php $user = Sentinel::getUser(); @endphp
             <input type="hidden" id="sa-user-maddox-id" value="{{ $user->maddox_id }}">
             <input type="hidden" id="sa-user-name" value="{{ $user->full_name }}">

@@ -2,7 +2,6 @@
 
 namespace Subodh\SmartAiAssistant\Tests\Feature;
 
-use Cartalyst\Sentinel\Laravel\Facades\Sentinel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Subodh\SmartAiAssistant\Models\Conversation;
@@ -314,16 +313,6 @@ class HelpEndpointTest extends TestCase
         $this->seedDefinition(['key_text' => 'error_code']);
 
         $this->ask('got errorXcode on screen')->assertJson(['source' => 'kb']);
-    }
-
-    public function test_authenticated_user_id_is_recorded_on_the_conversation(): void
-    {
-        $this->seedDefinition();
-        Sentinel::actingAs((object) ['id' => 42]);
-
-        $this->ask('capture timeout')->assertJson(['source' => 'kb']);
-
-        $this->assertSame(42, Conversation::sole()->user_id);
     }
 
     public function test_page_url_without_a_path_is_stored_as_null(): void

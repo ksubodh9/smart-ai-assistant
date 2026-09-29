@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
+use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
+use Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver;
 
 class SmartAiAssistantServiceProvider extends ServiceProvider
 {
@@ -63,6 +65,11 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__ . '/../config/smart-ai-assistant.php', 'smart-ai-assistant'
         );
+
+        // Identity comes from the host through the configured resolver class
+        $this->app->bind(UserContextResolver::class, function ($app) {
+            return $app->make(config('smart-ai-assistant.user_resolver', LaravelAuthUserContextResolver::class));
+        });
 
         // Register console commands
         if ($this->app->runningInConsole()) {

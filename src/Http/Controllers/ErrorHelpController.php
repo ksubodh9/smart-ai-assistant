@@ -4,9 +4,9 @@ namespace Subodh\SmartAiAssistant\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Models\Conversation;
 use Subodh\SmartAiAssistant\Models\Message;
-use Cartalyst\Sentinel\Laravel\Facades\Sentinel;
 use Subodh\SmartAiAssistant\Support\ErrorMatcher;
 use Subodh\SmartAiAssistant\Support\InputClassifier;
 
@@ -26,8 +26,10 @@ class ErrorHelpController extends Controller
      *   - error_text (string, required)
      *   - page_url (string, optional)
      */
-    public function store(Request $request)
+    public function store(Request $request, UserContextResolver $userContextResolver)
     {
+        $user = $userContextResolver->resolve($request);
+
         $validated = $request->validate([
             'error_text' => 'required|string|max:1000',
             'page_url'   => 'nullable|string|max:2048',
@@ -146,7 +148,7 @@ class ErrorHelpController extends Controller
         // STEP 6: Create conversation record (only for meaningful input)
         // =====================================================================
         $conversation = Conversation::create([
-            'user_id' => Sentinel::check() ? Sentinel::getUser()->id : null,
+            'user_id' => $user->id,
             'service' => $service,
             'status'  => 'resolved',
             'page_url'=> $pageUrl,

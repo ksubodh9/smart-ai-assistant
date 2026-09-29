@@ -4,6 +4,12 @@ return [
     // the host app's auth middleware, e.g. ['web', 'auth'] or ['web', 'sentinel.auth'].
     'middleware' => ['web'],
 
+    // Class that tells the package who the current user is. It must implement
+    // Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver. The default
+    // uses Laravel's auth guard; hosts with other authentication (e.g. Sentinel)
+    // provide their own class.
+    'user_resolver' => \Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver::class,
+
     // Requests per minute to the assistant endpoints. The per-session limit is
     // the main one; the per-IP limit is a generous backstop because many users
     // can share one IP (office NAT, or a load balancer that is not trusted).
