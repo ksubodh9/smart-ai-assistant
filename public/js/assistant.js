@@ -101,21 +101,22 @@ class SmartAssistant {
         if (result.success && result.data) {
             const data = result.data;
 
-            let responseHtml = '';
+            // Server answers are text with optional **bold**; never render them as HTML
+            const sections = [];
 
             if (data.answer_en) {
-                responseHtml += `<strong>💡 Solution:</strong><br>${data.answer_en}`;
+                sections.push(`**💡 Solution:**\n${data.answer_en}`);
             }
 
             if (data.answer_hi) {
-                responseHtml += `<br><br><strong>🇮🇳 हिंदी में:</strong><br>${data.answer_hi}`;
+                sections.push(`**🇮🇳 हिंदी में:**\n${data.answer_hi}`);
             }
 
-            if (!responseHtml) {
-                responseHtml = 'I found information about this error, but couldn\'t format it properly. Please try rephrasing your question.';
-            }
+            const responseText = sections.length
+                ? sections.join('\n\n')
+                : 'I found information about this error, but couldn\'t format it properly. Please try rephrasing your question.';
 
-            this.uiManager.addChatMessage(responseHtml, false);
+            this.uiManager.addFormattedMessage(responseText);
             this.uiManager.setStatus('Ready to help');
 
             // If unknown error, suggest manual query
