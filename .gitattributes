@@ -1,0 +1,2 @@
+# Keep bundled third-party files byte-identical to their upstream release
+public/js/vendor/** -text

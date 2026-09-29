@@ -108,8 +108,8 @@
 <!-- Load CSS -->
 <link rel="stylesheet" href="{{ asset('vendor/smart-ai-assistant/css/assistant.css') }}">
 
-<!-- Load html2canvas for screenshot capture -->
-<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<!-- Load html2canvas 1.4.1 (MIT) for screenshot capture; bundled, not loaded from a CDN -->
+<script src="{{ asset('vendor/smart-ai-assistant/js/vendor/html2canvas.min.js') }}"></script>
 
 <!-- Load JavaScript Modules -->
 <script src="{{ asset('vendor/smart-ai-assistant/js/ui-manager.js') }}"></script>
