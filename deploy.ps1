@@ -27,15 +27,19 @@ php artisan vendor:publish --tag=smart-ai-assistant-assets --force
 Write-Host "Done: Assets published" -ForegroundColor Green
 Write-Host ""
 
-# Step 4: Publish views
-Write-Host "[4/6] Publishing package views..." -ForegroundColor Yellow
-php artisan vendor:publish --tag=smart-ai-assistant-views --force
+# Step 4: Publish views (only if missing)
+# No --force: a published view is the host's customised copy (branding) and must not be overwritten.
+# To take a new package view, merge it into resources/views/vendor/smart-ai-assistant by hand.
+Write-Host "[4/6] Publishing package views (existing files are kept)..." -ForegroundColor Yellow
+php artisan vendor:publish --tag=smart-ai-assistant-views
 Write-Host "Done: Views published" -ForegroundColor Green
 Write-Host ""
 
-# Step 5: Publish config
-Write-Host "[5/6] Publishing package config..." -ForegroundColor Yellow
-php artisan vendor:publish --tag=smart-ai-assistant-config --force
+# Step 5: Publish config (only if missing)
+# No --force: the published config holds host settings such as the auth middleware.
+# Overwriting it would silently remove authentication from the assistant routes.
+Write-Host "[5/6] Publishing package config (existing file is kept)..." -ForegroundColor Yellow
+php artisan vendor:publish --tag=smart-ai-assistant-config
 Write-Host "Done: Config published" -ForegroundColor Green
 Write-Host ""
 

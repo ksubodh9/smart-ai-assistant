@@ -4,6 +4,7 @@ namespace Subodh\SmartAiAssistant\Tests\Feature;
 
 use Cartalyst\Sentinel\Laravel\Facades\Sentinel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Subodh\SmartAiAssistant\Models\Conversation;
 use Subodh\SmartAiAssistant\Models\ErrorDefinition;
 use Subodh\SmartAiAssistant\Models\Message;
@@ -26,9 +27,24 @@ class HelpEndpointTest extends TestCase
 
     private const UNKNOWN_HI = "यह त्रुटि अभी दस्तावेज़ में नहीं है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें।";
 
+    private string $sessionId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->sessionId = Str::random(40);
+    }
+
+    /**
+     * Posts like the widget does: same-origin fetch, so the browser's session
+     * cookie is sent and the loop guard sees one continuous session.
+     */
     private function ask(string $text, ?string $pageUrl = 'https://app.test/aeps?txn=1')
     {
-        return $this->postJson('/smart-assistant/help', array_filter([
+        return $this->withCredentials()
+            ->withCookie(config('session.cookie'), $this->sessionId)
+            ->postJson('/smart-assistant/help', array_filter([
             'error_text' => $text,
             'page_url'   => $pageUrl,
         ], fn ($v) => $v !== null));
@@ -70,9 +86,20 @@ class HelpEndpointTest extends TestCase
             ->assertJsonValidationErrors('error_text');
     }
 
-    public function test_known_gap_no_maximum_length_on_error_text(): void
+    public function test_error_text_is_limited_to_1000_characters(): void
     {
-        $this->ask(str_repeat('aeps withdrawal failed ', 500))->assertOk();
+        $this->ask('aeps withdrawal failed ' . str_repeat('x', 977))->assertOk();
+
+        $this->ask('aeps withdrawal failed ' . str_repeat('x', 978))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('error_text');
+    }
+
+    public function test_page_url_is_limited_to_2048_characters(): void
+    {
+        $this->ask('aeps withdrawal failed', 'https://app.test/' . str_repeat('a', 2100))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('page_url');
     }
 
     // ---------------------------------------------------------------------
@@ -209,8 +236,8 @@ class HelpEndpointTest extends TestCase
         $this->assertNull($conversation->user_id);
         $this->assertSame('AEPS', $conversation->service);
         $this->assertSame('resolved', $conversation->status);
-        // KNOWN GAP: the full URL, including the query string, is stored.
-        $this->assertSame('https://app.test/aeps?txn=1', $conversation->page_url);
+        // Only the path is stored; the query string (?txn=1) is dropped.
+        $this->assertSame('/aeps', $conversation->page_url);
         // assertEquals for JSON columns: MySQL does not preserve object key order.
         $this->assertEquals([
             'raw_error_text' => 'Biometric capture timeout, please retry',
@@ -299,11 +326,11 @@ class HelpEndpointTest extends TestCase
         $this->assertSame(42, Conversation::sole()->user_id);
     }
 
-    public function test_known_gap_route_is_reachable_without_authentication(): void
+    public function test_page_url_without_a_path_is_stored_as_null(): void
     {
-        $this->assertFalse(Sentinel::check());
+        $this->ask('aeps withdrawal failed', 'https://app.test?txn=1')->assertOk();
 
-        $this->ask('aeps withdrawal failed')->assertOk();
+        $this->assertNull(Conversation::sole()->page_url);
     }
 
     // ---------------------------------------------------------------------

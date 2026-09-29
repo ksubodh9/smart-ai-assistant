@@ -1,7 +1,16 @@
 <?php
 return [
-    // Middleware applied to package routes
-    'middleware' => ['web', 'auth'],
+    // Middleware applied to package routes. Keep 'web' (session + CSRF) and add
+    // the host app's auth middleware, e.g. ['web', 'auth'] or ['web', 'sentinel.auth'].
+    'middleware' => ['web'],
+
+    // Requests per minute to the assistant endpoints. The per-session limit is
+    // the main one; the per-IP limit is a generous backstop because many users
+    // can share one IP (office NAT, or a load balancer that is not trusted).
+    'rate_limit' => [
+        'per_session' => env('SMART_AI_RATE_LIMIT_PER_SESSION', 30),
+        'per_ip'      => env('SMART_AI_RATE_LIMIT_PER_IP', 300),
+    ],
 
     // Default service identifier (AEPS)
     'default_service' => env('SMART_AI_DEFAULT_SERVICE', 'AEPS'),
