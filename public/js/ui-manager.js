@@ -689,7 +689,43 @@ class UIManager {
         }
     }
 
+    /**
+     * Add a plain-text chat message. The text is never parsed as HTML;
+     * line breaks are preserved.
+     */
     addChatMessage(message, isUser = false, isError = false) {
+        this.appendChatBubble(isUser, isError, (bubble) => this.appendText(bubble, message));
+    }
+
+    /**
+     * Add an assistant message with basic formatting: **bold** and line breaks.
+     * Everything else is rendered as text, so server content cannot inject HTML.
+     */
+    addFormattedMessage(message, isError = false) {
+        this.appendChatBubble(false, isError, (bubble) => this.appendFormattedText(bubble, message));
+    }
+
+    appendText(parent, text) {
+        String(text ?? '').split('\n').forEach((line, index) => {
+            if (index > 0) parent.appendChild(document.createElement('br'));
+            if (line) parent.appendChild(document.createTextNode(line));
+        });
+    }
+
+    appendFormattedText(parent, text) {
+        String(text ?? '').split(/(\*\*[^*\n]+\*\*)/).forEach(part => {
+            const bold = part.match(/^\*\*([^*\n]+)\*\*$/);
+            if (bold) {
+                const strong = document.createElement('strong');
+                strong.textContent = bold[1];
+                parent.appendChild(strong);
+            } else {
+                this.appendText(parent, part);
+            }
+        });
+    }
+
+    appendChatBubble(isUser, isError, fillBubble) {
         if (!this.chatContainer) return;
 
         const messageDiv = document.createElement('div');
@@ -701,7 +737,7 @@ class UIManager {
 
         const bubble = document.createElement('div');
         bubble.className = 'sa-chat-bubble';
-        bubble.innerHTML = message;
+        fillBubble(bubble);
 
         messageDiv.appendChild(bubble);
         this.chatContainer.appendChild(messageDiv);

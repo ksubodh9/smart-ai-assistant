@@ -80,8 +80,8 @@ class FilePreviewManager {
                 ${this.getThumbnailContent(file, fileType)}
             </div>
             <div class="sa-file-info">
-                <div class="sa-file-name">${fileName}</div>
-                <div class="sa-file-size">${fileSize}</div>
+                <div class="sa-file-name"></div>
+                <div class="sa-file-size"></div>
             </div>
             <button class="sa-file-remove" title="Remove file">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -90,6 +90,9 @@ class FilePreviewManager {
                 </svg>
             </button>
         `;
+        // File names are user-controlled: set as text, never interpolate into HTML
+        previewDiv.querySelector('.sa-file-name').textContent = fileName;
+        previewDiv.querySelector('.sa-file-size').textContent = fileSize;
 
         this.previewContainer.appendChild(previewDiv);
         this.previewContainer.style.display = 'block';
@@ -576,9 +579,15 @@ class FilePreviewManager {
                 <div class="sa-fullscreen-inner">
                     ${this.getFullscreenContent(file, fileType)}
                 </div>
-                <div class="sa-fullscreen-filename">${file.name}</div>
+                <div class="sa-fullscreen-filename"></div>
             </div>
         `;
+        // File names are user-controlled: set as text/attribute values, never as HTML
+        modal.querySelector('.sa-fullscreen-filename').textContent = file.name;
+        const fullscreenImage = modal.querySelector('.sa-fullscreen-inner img');
+        if (fullscreenImage) fullscreenImage.alt = file.name;
+        const fileDetails = modal.querySelector('.sa-fullscreen-inner .sa-file-details');
+        if (fileDetails) fileDetails.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
 
         document.body.appendChild(modal);
         setTimeout(() => modal.classList.add('sa-modal-open'), 10);
@@ -606,7 +615,7 @@ class FilePreviewManager {
     getFullscreenContent(file, fileType) {
         if (fileType === 'image') {
             const url = URL.createObjectURL(file);
-            return `<img src="${url}" alt="${file.name}" />`;
+            return `<img src="${url}" alt="" />`;
         } else if (fileType === 'pdf') {
             const url = URL.createObjectURL(file);
             return `<iframe src="${url}" frameborder="0"></iframe>`;
@@ -618,7 +627,7 @@ class FilePreviewManager {
                         <polyline points="13 2 13 9 20 9"></polyline>
                     </svg>
                     <p>Preview not available for this file type</p>
-                    <p class="sa-file-details">${file.name} (${this.formatFileSize(file.size)})</p>
+                    <p class="sa-file-details"></p>
                 </div>
             `;
         }
