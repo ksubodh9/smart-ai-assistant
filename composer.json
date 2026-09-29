@@ -27,5 +27,18 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Subodh\\SmartAiAssistant\\Tests\\": "tests/",
+            "Cartalyst\\Sentinel\\Laravel\\Facades\\": "tests/Stubs/Sentinel/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
 }

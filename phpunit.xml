@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory=".phpunit.cache"
+         colors="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <!--
+            Feature tests run against MySQL because ErrorMatcher uses MySQL-specific SQL.
+            The database is wiped on every run: never point this at a real database.
+            Override locally with real environment variables if your credentials differ.
+        -->
+        <env name="SMART_AI_TEST_DB_HOST" value="127.0.0.1"/>
+        <env name="SMART_AI_TEST_DB_PORT" value="3306"/>
+        <env name="SMART_AI_TEST_DB_DATABASE" value="smart_ai_assistant_test"/>
+        <env name="SMART_AI_TEST_DB_USERNAME" value="root"/>
+        <env name="SMART_AI_TEST_DB_PASSWORD" value=""/>
+    </php>
+</phpunit>
