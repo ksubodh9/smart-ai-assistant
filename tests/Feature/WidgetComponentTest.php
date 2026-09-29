@@ -56,10 +56,34 @@ class WidgetComponentTest extends TestCase
             ->assertSee('id="sa-user-phone" value="9999999999"', false);
     }
 
-    public function test_known_gap_html2canvas_is_loaded_from_a_cdn_without_integrity(): void
+    public function test_html2canvas_is_bundled_and_loaded_before_the_widget_scripts(): void
     {
         $this->blade('<x-smart-assistant-widget />')
-            ->assertSee('src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"', false)
-            ->assertDontSee('integrity=', false);
+            ->assertDontSee('unpkg.com', false)
+            ->assertSeeInOrder([
+                'vendor/smart-ai-assistant/js/vendor/html2canvas.min.js',
+                'vendor/smart-ai-assistant/js/ui-manager.js',
+            ], false);
+    }
+
+    public function test_the_widget_loads_no_third_party_scripts(): void
+    {
+        $html = (string) $this->blade('<x-smart-assistant-widget />');
+
+        preg_match_all('/<script[^>]+src="([^"]+)"/', $html, $matches);
+
+        $this->assertNotEmpty($matches[1]);
+        foreach ($matches[1] as $src) {
+            $this->assertStringStartsWith(url('vendor/smart-ai-assistant/'), $src);
+        }
+    }
+
+    public function test_bundled_html2canvas_file_ships_with_the_package_assets(): void
+    {
+        $file = __DIR__ . '/../../public/js/vendor/html2canvas.min.js';
+
+        $this->assertFileExists($file);
+        $this->assertStringContainsString('html2canvas 1.4.1', file_get_contents($file, false, null, 0, 200));
+        $this->assertFileExists(__DIR__ . '/../../public/js/vendor/html2canvas.LICENSE.txt');
     }
 }
