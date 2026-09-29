@@ -4,19 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Laravel package (`subodh/smart-ai-assistant`, namespace `Subodh\SmartAiAssistant\`, PSR-4 from `src/`) that ships a floating support-chat widget ("Soniya") for the Maddox Pay app. It is developed in place at `packages/smart-ai-assistant/` inside a host Laravel app and has no standalone build, test suite, or linter. Commands such as `php artisan` must run from the **host app root**, not from this directory.
+A Laravel package (`subodh/smart-ai-assistant`, namespace `Subodh\SmartAiAssistant\`, PSR-4 from `src/`) that ships a floating support-chat widget ("Soniya") for the Maddox Pay app. It is developed at `packages/smart-ai-assistant/` next to the host apps. However, the host (`mdxplaygrnd`) installs **tagged releases from GitHub** (`ksubodh9/smart-ai-assistant`) through Composer, not this folder. Package changes reach the host only after you push, tag a release, and run `composer update subodh/smart-ai-assistant` in the host. There is no build step or linter. Commands such as `php artisan` must run from the **host app root**; the tests run from this directory.
 
 The auto-discovered `SmartAiAssistantServiceProvider` is the entry point. It loads routes and migrations, registers the `<x-smart-assistant-widget />` Blade component, and registers the `smart-ai:seed-kb` command.
 
 ## Commands (run from host app root)
 
 ```bash
-# Full redeploy after changing package files (clears caches, dump-autoload, republishes assets/views/config)
+# Full redeploy (clears caches, dump-autoload, force-republishes assets; publishes views/config only if missing)
 powershell -File packages/smart-ai-assistant/deploy.ps1
 
-# Minimum needed after editing JS/CSS or the Blade view
+# Minimum needed after a package update that changes JS/CSS
 php artisan vendor:publish --tag=smart-ai-assistant-assets --force   # public/ -> public/vendor/smart-ai-assistant
-php artisan vendor:publish --tag=smart-ai-assistant-views --force    # resources/views -> resources/views/vendor/smart-ai-assistant
 php artisan view:clear
 
 # Seed/update the knowledge base from a spreadsheet (xlsx/csv via PhpSpreadsheet)
@@ -24,7 +23,7 @@ php artisan view:clear
 php artisan smart-ai:seed-kb path/to/file.xlsx
 ```
 
-**Important:** the browser loads the *published copies*, not the files in this package. JS, CSS, and view edits do not show up until you republish them with `--force` and hard-refresh the browser. Views published to `resources/views/vendor/smart-ai-assistant` also override the package view.
+**Important:** the browser loads the *published copies*, not the files in this package. JS and CSS edits do not show up until the assets are republished with `--force` and the browser is hard-refreshed. `publish --force` copies from the host's `vendor/` (the installed release), not from this folder. The host keeps customised copies of the view (`resources/views/vendor/smart-ai-assistant`, for branding) and the config (it holds the auth middleware). **Never force-publish views or config**: merge package changes into those files by hand.
 
 ### Tests (run from this package directory, not the host app)
 
@@ -40,7 +39,7 @@ The JavaScript has no automated tests. Frontend changes are still verified manua
 ## Architecture
 
 ### Backend request flow: `POST /smart-assistant/help`
-Route name: `smart-assistant.help`. It uses only the `web` middleware, because the `middleware` key in the config is **not** used by `routes/web.php`.
+Route name: `smart-assistant.help`. The middleware is `config('smart-ai-assistant.middleware')` (package default `['web']`; hosts add their auth middleware, e.g. MaddoxPay uses `['web', 'sentinel.auth']`), followed by `throttle:smart-assistant`. That rate limiter is defined in the service provider, with limits per session and per IP from `config('smart-ai-assistant.rate_limit')`. `error_text` is limited to 1000 characters, and only the path of `page_url` is stored.
 
 `ErrorHelpController::store` runs a deterministic pipeline. No LLM is called; `config('smart-ai-assistant.ai')` is a stub for later.
 1. **`Support\InputClassifier::classify()`** uses regex checks in a fixed priority order: empty → severe abuse → noise → greeting → vague → escalation request → mild abuse → valid. It also tags a keyword category (PAN, RECHARGE, AEPS, PAYOUT, KYC, IRCTC, INFO). It returns `should_process`, `should_escalate`, `response`, and `category`.

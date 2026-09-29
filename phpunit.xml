@@ -21,6 +21,7 @@
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="CACHE_STORE" value="array"/>
         <!--
             Feature tests run against MySQL because ErrorMatcher uses MySQL-specific SQL.
             The database is wiped on every run: never point this at a real database.

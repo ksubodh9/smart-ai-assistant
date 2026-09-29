@@ -2,8 +2,11 @@
 
 namespace Subodh\SmartAiAssistant;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\RateLimiter;
 
 class SmartAiAssistantServiceProvider extends ServiceProvider
 {
@@ -12,6 +15,17 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // Rate limiter used by the package routes (throttle:smart-assistant)
+        RateLimiter::for('smart-assistant', function (Request $request) {
+            $limits = config('smart-ai-assistant.rate_limit', []);
+            $sessionKey = $request->hasSession() ? $request->session()->getId() : $request->ip();
+
+            return [
+                Limit::perMinute((int) ($limits['per_session'] ?? 30))->by('smart-assistant:session:' . $sessionKey),
+                Limit::perMinute((int) ($limits['per_ip'] ?? 300))->by('smart-assistant:ip:' . $request->ip()),
+            ];
+        });
+
         // Load routes
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
 

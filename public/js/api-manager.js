@@ -24,6 +24,14 @@ class APIManager {
                 })
             });
 
+            if (response.status === 429) {
+                return { success: false, error: 'rate_limited' };
+            }
+
+            if (!response.ok) {
+                return { success: false, error: 'http_error', status: response.status };
+            }
+
             const text = await response.text();
 
             try {

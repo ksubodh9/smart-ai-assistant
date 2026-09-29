@@ -5,7 +5,11 @@ use Subodh\SmartAiAssistant\Http\Controllers\ErrorHelpController;
 
 Route::group([
     'prefix' => 'smart-assistant',
-    'middleware' => ['web'],
+    // Host middleware (session, auth) runs first, then the package rate limit
+    'middleware' => array_merge(
+        (array) config('smart-ai-assistant.middleware', ['web']),
+        ['throttle:smart-assistant']
+    ),
 ], function () {
     Route::post('/help', [ErrorHelpController::class, 'store'])->name('smart-assistant.help');
 });

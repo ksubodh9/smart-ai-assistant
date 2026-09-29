@@ -131,6 +131,9 @@ class SmartAssistant {
         } else if (result.error === 'network_error') {
             this.uiManager.showNetworkError();
             this.uiManager.setStatus('Network error');
+        } else if (result.error === 'rate_limited') {
+            this.uiManager.addChatMessage('⏳ Too many requests. Please wait a minute and try again.', false, true);
+            this.uiManager.setStatus('Please wait');
         } else {
             this.uiManager.showParseError();
             this.uiManager.setStatus('Error occurred');

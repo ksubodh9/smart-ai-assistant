@@ -29,12 +29,15 @@ class ErrorHelpController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'error_text' => 'required|string',
-            'page_url'   => 'nullable|string',
+            'error_text' => 'required|string|max:1000',
+            'page_url'   => 'nullable|string|max:2048',
         ]);
-        
+
         $errorText = trim($validated['error_text']);
-        $pageUrl   = $validated['page_url'] ?? null;
+        // Store the path only: query strings can carry transaction ids and personal data
+        $pageUrl   = isset($validated['page_url'])
+            ? (parse_url($validated['page_url'], PHP_URL_PATH) ?: null)
+            : null;
         $service   = config('smart-ai-assistant.default_service', 'AEPS');
 
         // =====================================================================
