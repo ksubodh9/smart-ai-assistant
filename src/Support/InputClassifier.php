@@ -33,61 +33,61 @@ class InputClassifier
      * Greeting patterns
      */
     protected array $greetingPatterns = [
-        '/^(hi|hello|hey|hii+|helo|hlo|namaste|namaskar)[\s\!\.\?]*$/i',
-        '/^(good\s*(morning|afternoon|evening|night|day))[\s\!\.\?]*$/i',
-        '/^(howdy|sup|yo|hiya)[\s\!\.\?]*$/i',
+        '/^(hi|hello|hey|hii+|helo|hlo|namaste|namaskar)[\s\!\.\?]*$/iu',
+        '/^(good\s*(morning|afternoon|evening|night|day))[\s\!\.\?]*$/iu',
+        '/^(howdy|sup|yo|hiya)[\s\!\.\?]*$/iu',
     ];
 
     /**
      * Vague input patterns
      */
     protected array $vaguePatterns = [
-        '/^(help|help me|need help|i need help)[\s\!\.\?]*$/i',
-        '/^(issue|problem|error|not working)[\s\!\.\?]*$/i',
-        '/^(something (is )?(wrong|broken|not working))[\s\!\.\?]*$/i',
-        '/^(it\'?s? not working)[\s\!\.\?]*$/i',
-        '/^(please help)[\s\!\.\?]*$/i',
-        '/^(kuch gadbad hai|kaam nahi kar raha)[\s\!\.\?]*$/i',
+        '/^(help|help me|need help|i need help)[\s\!\.\?]*$/iu',
+        '/^(issue|problem|error|not working)[\s\!\.\?]*$/iu',
+        '/^(something (is )?(wrong|broken|not working))[\s\!\.\?]*$/iu',
+        '/^(it\'?s? not working)[\s\!\.\?]*$/iu',
+        '/^(please help)[\s\!\.\?]*$/iu',
+        '/^(kuch gadbad hai|kaam nahi kar raha)[\s\!\.\?]*$/iu',
     ];
 
     /**
      * Noise patterns (test, random, etc)
      */
     protected array $noisePatterns = [
-        '/^(test|testing|123|abc|xyz|qwerty|asdf)[\s]*$/i',
-        '/^([a-z])\1{2,}$/i', // repeated chars like 'aaaa'
-        '/^[\W\d\s]+$/i', // only symbols, numbers, whitespace
-        '/^.{1,2}$/i', // 1-2 char inputs
+        '/^(test|testing|123|abc|xyz|qwerty|asdf)[\s]*$/iu',
+        '/^([a-z])\1{2,}$/iu', // repeated chars like 'aaaa'
+        '/^[\W\d\s]+$/iu', // only symbols, numbers, whitespace
+        '/^.{1,2}$/iu', // 1-2 char inputs
     ];
 
     /**
      * Mild abuse patterns
      */
     protected array $mildAbusePatterns = [
-        '/\b(damn|crap|sucks|stupid|useless|rubbish|pathetic|worst)\b/i',
-        '/\b(bakwas|bekaar|wahiyat|ghatiya)\b/i',
+        '/\b(damn|crap|sucks|stupid|useless|rubbish|pathetic|worst)\b/iu',
+        '/\b(bakwas|bekaar|wahiyat|ghatiya)\b/iu',
     ];
 
     /**
      * Severe abuse patterns
      */
     protected array $severeAbusePatterns = [
-        '/\b(f+u+c+k+|shit|bastard|bitch|ass+hole)\b/i',
-        '/\b(kill|murder|die|threat)\b/i',
-        '/\b(madarch[o0]d|bhench[o0]d|chutiya|gandu|harami|saala|kutta|kamina)\b/i',
-        '/\b(randi|hijra|chakka)\b/i',
+        '/\b(f+u+c+k+|shit|bastard|bitch|ass+hole)\b/iu',
+        '/\b(kill|murder|die|threat)\b/iu',
+        '/\b(madarch[o0]d|bhench[o0]d|chutiya|gandu|harami|saala|kutta|kamina)\b/iu',
+        '/\b(randi|hijra|chakka)\b/iu',
     ];
 
     /**
      * Escalation request patterns (explicit user request for human support)
      */
     protected array $escalationPatterns = [
-        '/\b(talk to (a\s*)?(human|agent|person|support|executive))\b/i',
-        '/\b(call me|call back|contact me)\b/i',
-        '/\b(escalate|escalation|raise (a\s*)?complaint)\b/i',
-        '/\b(speak to (a\s*)?(manager|supervisor))\b/i',
-        '/\b(need (a\s*)?(human|real person))\b/i',
-        '/\b(this (is\s*)?(not helping|useless))\b/i',
+        '/\b(talk to (a\s*)?(human|agent|person|support|executive))\b/iu',
+        '/\b(call me|call back|contact me)\b/iu',
+        '/\b(escalate|escalation|raise (a\s*)?complaint)\b/iu',
+        '/\b(speak to (a\s*)?(manager|supervisor))\b/iu',
+        '/\b(need (a\s*)?(human|real person))\b/iu',
+        '/\b(this (is\s*)?(not helping|useless))\b/iu',
     ];
 
     /**
@@ -109,6 +109,11 @@ class InputClassifier
         // 1. Empty check
         if (empty($trimmed)) {
             return $this->result(self::TYPE_EMPTY, false, $this->getEmptyResponse());
+        }
+
+        // Patterns are Unicode-aware (/u) and do not match invalid UTF-8 at all
+        if (!mb_check_encoding($trimmed, 'UTF-8')) {
+            return $this->result(self::TYPE_NOISE, false, $this->getNoiseResponse());
         }
 
         // 2. Severe abuse check

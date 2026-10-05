@@ -138,13 +138,20 @@ class HelpEndpointTest extends TestCase
         $this->assertNothingPersisted();
     }
 
-    public function test_known_bug_hindi_only_input_is_treated_as_noise(): void
+    public function test_hindi_only_input_is_processed_and_persisted(): void
     {
         $this->ask('पैसा कट गया लेकिन ट्रांजैक्शन फेल')
             ->assertOk()
-            ->assertJson(['source' => 'noise', 'input_type' => 'noise']);
+            ->assertJson(['source' => 'unknown', 'input_type' => 'valid']);
 
-        $this->assertNothingPersisted();
+        $this->assertSame('पैसा कट गया लेकिन ट्रांजैक्शन फेल', Message::where('sender_type', 'user')->sole()->message);
+    }
+
+    public function test_hindi_input_can_match_a_hindi_key(): void
+    {
+        $this->seedDefinition(['key_text' => 'पैसा कट गया']);
+
+        $this->ask('पैसा कट गया लेकिन ट्रांजैक्शन फेल')->assertJson(['source' => 'kb']);
     }
 
     public function test_repeating_the_same_canned_reply_returns_exit_message(): void

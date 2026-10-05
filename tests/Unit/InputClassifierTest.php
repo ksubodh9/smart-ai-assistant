@@ -82,9 +82,12 @@ class InputClassifierTest extends TestCase
             'company -> PAN (known bug)'          => ['company name mismatch', 'valid', 'PAN', true, false],
             'raise ticket -> IRCTC (known bug)'   => ['how to raise ticket', 'valid', 'IRCTC', true, false],
 
-            // KNOWN BUG: regexes lack the /u flag, so Devanagari-only text matches the noise rule.
-            'hindi sentence (known bug)' => ['पैसा कट गया लेकिन ट्रांजैक्शन फेल', 'noise', null, false, false],
-            'hindi pan (known bug)'      => ['मेरा पैन कार्ड', 'noise', null, false, false],
+            // Devanagari is text, not noise (Unicode-aware patterns)
+            'hindi sentence'             => ['पैसा कट गया लेकिन ट्रांजैक्शन फेल', 'valid', null, true, false],
+            'hindi pan'                  => ['मेरा पैन कार्ड', 'valid', null, true, false],
+            'two hindi characters'       => ['है', 'noise', null, false, false],
+            'hindi danda only'           => ['।।।', 'noise', null, false, false],
+            'invalid utf-8'              => ["\xC3\x28 aeps failed", 'noise', null, false, false],
         ];
     }
 
