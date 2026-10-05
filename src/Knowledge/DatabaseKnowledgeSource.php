@@ -19,6 +19,8 @@ class DatabaseKnowledgeSource implements KnowledgeSource
 {
     public const SOURCE_ID = 'database';
 
+    private const FALLBACK_LIMIT = 5000;
+
     public function __construct(private readonly string $service)
     {
     }
@@ -36,18 +38,31 @@ class DatabaseKnowledgeSource implements KnowledgeSource
             return null;
         }
 
-        // First try a case-insensitive LIKE query where the key_text appears anywhere
-        $definition = ErrorDefinition::where('service', $this->service)
-            ->whereRaw('LOWER(?) LIKE CONCAT("%", LOWER(key_text), "%")', [$text])
+        // First try a case-insensitive LIKE query where the key_text appears anywhere.
+        // "%" and "_" in key_text are escaped, so they match literally.
+        $query = ErrorDefinition::where('service', $this->service);
+        $escapedKey = "REPLACE(REPLACE(REPLACE(LOWER(key_text), '!', '!!'), '%', '!%'), '_', '!_')";
+        $pattern = $query->getConnection()->getDriverName() === 'sqlite'
+            ? "'%' || {$escapedKey} || '%'"
+            : "CONCAT('%', {$escapedKey}, '%')";
+
+        $definition = $query->whereRaw("LOWER(?) LIKE {$pattern} ESCAPE '!'", [$text])
+            ->orderBy('id')
             ->first();
 
         if ($definition) {
             return $definition;
         }
 
-        // Fallback: fetch all definitions for the service and check with Str::contains
+        // Fallback for collations where SQL LOWER/LIKE and PHP disagree. Capped,
+        // because it loads rows into PHP.
         $lowerText = Str::lower($text);
-        foreach (ErrorDefinition::where('service', $this->service)->get() as $candidate) {
+        $candidates = ErrorDefinition::where('service', $this->service)
+            ->orderBy('id')
+            ->limit(self::FALLBACK_LIMIT)
+            ->get();
+
+        foreach ($candidates as $candidate) {
             if (Str::contains($lowerText, Str::lower($candidate->key_text))) {
                 return $candidate;
             }

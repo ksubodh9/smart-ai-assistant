@@ -3,6 +3,7 @@
 namespace Subodh\SmartAiAssistant\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
 use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
@@ -47,6 +48,22 @@ class DatabaseKnowledgeSourceTest extends TestCase
         $this->assertSame([], $this->find('something else', 'PAN'));
         $this->assertSame([], $this->find('   '));
         $this->assertCount(1, $this->find('capture timeout', 'PAN'));
+    }
+
+    public function test_matches_are_found_by_sql_not_the_php_fallback(): void
+    {
+        // The fallback would hide a broken SQL pattern, so a hit must take one query.
+        foreach (['capture timeout', 'error_code', '100%', 'retry!', "it's down"] as $key) {
+            ErrorDefinition::create(['service' => 'AEPS', 'key_text' => $key, 'answer_en' => $key]);
+        }
+
+        foreach (['CAPTURE TIMEOUT now', 'got error_code', 'at 100% now', 'please retry! it', "it's down again"] as $text) {
+            DB::enableQueryLog();
+            DB::flushQueryLog();
+
+            $this->assertCount(1, $this->find($text), $text);
+            $this->assertCount(1, DB::getQueryLog(), "SQL path missed: {$text}");
+        }
     }
 
     public function test_the_container_builds_it_for_the_configured_service(): void

@@ -307,12 +307,28 @@ class HelpEndpointTest extends TestCase
             ]);
     }
 
-    public function test_known_bug_like_wildcards_in_key_text_are_not_escaped(): void
+    public function test_like_wildcards_in_key_text_match_literally(): void
     {
-        // "_" is a single-character LIKE wildcard, so this key also matches "errorXcode".
         $this->seedDefinition(['key_text' => 'error_code']);
 
-        $this->ask('got errorXcode on screen')->assertJson(['source' => 'kb']);
+        $this->ask('got errorXcode on screen')->assertJson(['source' => 'unknown']);
+        $this->ask('got error_code on screen')->assertJson(['source' => 'kb']);
+    }
+
+    public function test_a_percent_key_does_not_match_everything(): void
+    {
+        $this->seedDefinition(['key_text' => '100%']);
+
+        $this->ask('withdrawal of 1000 failed')->assertJson(['source' => 'unknown']);
+        $this->ask('battery at 100% but capture failed')->assertJson(['source' => 'kb']);
+    }
+
+    public function test_exclamation_marks_in_key_text_match_literally(): void
+    {
+        // "!" is the LIKE escape character, so it must itself be escaped.
+        $this->seedDefinition(['key_text' => 'retry!']);
+
+        $this->ask('please retry! the device')->assertJson(['source' => 'kb']);
     }
 
     public function test_page_url_without_a_path_is_stored_as_null(): void
