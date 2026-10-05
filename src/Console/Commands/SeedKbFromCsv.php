@@ -14,7 +14,9 @@ class SeedKbFromCsv extends Command
      *
      * @var string
      */
-    protected $signature = 'smart-ai:seed-kb {file : The path to the CSV file}';
+    protected $signature = 'smart-ai:seed-kb
+        {file : The path to the CSV or Excel file}
+        {--domain= : Knowledge domain (service) for the entries; defaults to config default_service}';
 
     /**
      * The console command description.
@@ -52,7 +54,7 @@ class SeedKbFromCsv extends Command
             return 1;
         }
 
-        $service = config('smart-ai-assistant.default_service', 'AEPS');
+        $service = $this->option('domain') ?: config('smart-ai-assistant.default_service', 'AEPS');
         $count = 0;
 
         $isHeader = true;
@@ -93,14 +95,13 @@ class SeedKbFromCsv extends Command
                 [
                     'answer_en' => $ansEng,
                     'answer_hi' => $ansHin,
-                    'match_type'=> 'fuzzy',
                 ]
             );
 
             $count++;
         }
 
-        $this->info("Successfully seeded {$count} entries into the Knowledge Base.");
+        $this->info("Successfully seeded {$count} entries into the Knowledge Base ({$service}).");
         return 0;
     }
 
