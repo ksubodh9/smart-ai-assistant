@@ -76,11 +76,16 @@ class InputClassifierTest extends TestCase
             'hinglish aeps'          => ['aeps me paisa kat gaya', 'valid', 'AEPS', true, false],
             'no category'            => ['money deducted but transaction failed', 'valid', null, true, false],
 
-            // KNOWN BUG: substring keyword matching ("vi" in device/service, "pan" in company, "ticket").
-            'device -> RECHARGE (known bug)'      => ['my device is not detected', 'valid', 'RECHARGE', true, false],
-            'RD service -> RECHARGE (known bug)'  => ['Error 1001: RD service not running', 'valid', 'RECHARGE', true, false],
-            'company -> PAN (known bug)'          => ['company name mismatch', 'valid', 'PAN', true, false],
-            'raise ticket -> IRCTC (known bug)'   => ['how to raise ticket', 'valid', 'IRCTC', true, false],
+            // Keywords match whole words only, with an optional plural "s"
+            'device has no category'     => ['my device is not detected', 'valid', null, true, false],
+            'RD service has no category' => ['Error 1001: RD service not running', 'valid', null, true, false],
+            'company has no category'    => ['company name mismatch', 'valid', null, true, false],
+            'video is not vi'            => ['video kyc not opening', 'valid', 'KYC', true, false],
+            'plural keyword'             => ['two recharges failed', 'valid', 'RECHARGE', true, false],
+            'keyword in punctuation'     => ['status (aeps)?', 'valid', 'AEPS', true, false],
+            'uppercase vi'               => ['VI recharge failed', 'valid', 'RECHARGE', true, false],
+            // KNOWN BUG: "ticket" is an IRCTC keyword, so support-ticket questions are tagged IRCTC.
+            'raise ticket -> IRCTC (known bug)' => ['how to raise ticket', 'valid', 'IRCTC', true, false],
 
             // Devanagari is text, not noise (Unicode-aware patterns)
             'hindi sentence'             => ['पैसा कट गया लेकिन ट्रांजैक्शन फेल', 'valid', null, true, false],

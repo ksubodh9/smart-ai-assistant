@@ -165,10 +165,10 @@ class InputClassifier
 
     protected function detectCategory(string $input): ?string
     {
-        $lowerInput = strtolower($input);
         foreach ($this->categoryMap as $category => $keywords) {
             foreach ($keywords as $keyword) {
-                if (str_contains($lowerInput, $keyword)) {
+                // Whole words only ("vi" must not match "device"); a plural "s" is allowed
+                if (preg_match('/\b' . preg_quote($keyword, '/') . 's?\b/iu', $input)) {
                     return $category;
                 }
             }
