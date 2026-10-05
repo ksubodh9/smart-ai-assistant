@@ -338,6 +338,29 @@ class HelpEndpointTest extends TestCase
         $this->ask('please retry! the device')->assertJson(['source' => 'kb']);
     }
 
+    public function test_personal_data_is_redacted_before_storage_but_not_from_matching(): void
+    {
+        $this->seedDefinition();
+
+        $this->ask('capture timeout for 9876543210, pan ABCDE1234F', 'https://app.test/txn/234567890123')
+            ->assertOk()
+            ->assertJson(['source' => 'kb']);
+
+        $conversation = Conversation::sole();
+        $this->assertSame('capture timeout for [phone], pan [pan]', $conversation->meta['raw_error_text']);
+        $this->assertSame('/txn/[number]', $conversation->page_url);
+        $this->assertSame('capture timeout for [phone], pan [pan]', Message::where('sender_type', 'user')->sole()->message);
+    }
+
+    public function test_the_redactor_is_replaceable_through_config(): void
+    {
+        config(['smart-ai-assistant.redactor' => UppercaseRedactor::class]);
+
+        $this->ask('aeps withdrawal failed')->assertOk();
+
+        $this->assertSame('AEPS WITHDRAWAL FAILED', Message::where('sender_type', 'user')->sole()->message);
+    }
+
     public function test_page_url_without_a_path_is_stored_as_null(): void
     {
         $this->ask('aeps withdrawal failed', 'https://app.test?txn=1')->assertOk();
@@ -411,5 +434,13 @@ class HelpEndpointTest extends TestCase
         $this->ask('capture timeout')->assertJson(['source' => 'kb']);
         // Different wording, same KB answer and same (null) category -> exit.
         $this->ask('there is a capture timeout')->assertJson(['source' => 'exit']);
+    }
+}
+
+class UppercaseRedactor implements \Subodh\SmartAiAssistant\Core\Contracts\Redactor
+{
+    public function redact(string $text): string
+    {
+        return strtoupper($text);
     }
 }

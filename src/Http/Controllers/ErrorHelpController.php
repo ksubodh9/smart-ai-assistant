@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
 use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
+use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
 use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
@@ -42,6 +43,7 @@ class ErrorHelpController extends Controller
         Interpreter $interpreter,
         KnowledgeSource $knowledge,
         InputClassifier $inputClassifier,
+        Redactor $redactor,
     ) {
         $user = $userContextResolver->resolve($request);
 
@@ -164,13 +166,17 @@ class ErrorHelpController extends Controller
         // =====================================================================
         // STEP 6: Create conversation record (only for meaningful input)
         // =====================================================================
+        // User-supplied text is redacted before storage; KB answers are not,
+        // since they are authored content (and may contain helpline numbers).
+        $storedText = $redactor->redact($errorText);
+
         $conversation = Conversation::create([
             'user_id' => $user->id,
             'service' => $service,
             'status'  => 'resolved',
-            'page_url'=> $pageUrl,
+            'page_url'=> $pageUrl !== null ? $redactor->redact($pageUrl) : null,
             'meta'    => [
-                'raw_error_text' => $errorText,
+                'raw_error_text' => $storedText,
                 'input_type'     => $inputType,
                 'category'       => $category,
             ],
@@ -180,7 +186,7 @@ class ErrorHelpController extends Controller
         Message::create([
             'conversation_id' => $conversation->id,
             'sender_type'    => 'user',
-            'message'        => $errorText,
+            'message'        => $storedText,
             'data'           => [
                 'input_type' => $inputType,
                 'category'   => $category,

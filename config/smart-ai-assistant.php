@@ -10,6 +10,11 @@ return [
     // provide their own class.
     'user_resolver' => \Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver::class,
 
+    // Class that masks personal data (phone, email, PAN, Aadhaar, account
+    // numbers) in user text before it is stored. It must implement
+    // Subodh\SmartAiAssistant\Core\Contracts\Redactor.
+    'redactor' => \Subodh\SmartAiAssistant\Support\DefaultRedactor::class,
+
     // Requests per minute to the assistant endpoints. The per-session limit is
     // the main one; the per-IP limit is a generous backstop because many users
     // can share one IP (office NAT, or a load balancer that is not trusted).
