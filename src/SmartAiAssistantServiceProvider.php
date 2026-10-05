@@ -7,8 +7,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
+use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
+use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
+use Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource;
 use Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver;
+use Subodh\SmartAiAssistant\Understanding\RuleBasedInterpreter;
 
 class SmartAiAssistantServiceProvider extends ServiceProvider
 {
@@ -69,6 +73,12 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
         // Identity comes from the host through the configured resolver class
         $this->app->bind(UserContextResolver::class, function ($app) {
             return $app->make(config('smart-ai-assistant.user_resolver', LaravelAuthUserContextResolver::class));
+        });
+
+        $this->app->bind(Interpreter::class, RuleBasedInterpreter::class);
+
+        $this->app->bind(KnowledgeSource::class, function () {
+            return new DatabaseKnowledgeSource(config('smart-ai-assistant.default_service', 'AEPS'));
         });
 
         // Register console commands

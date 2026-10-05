@@ -4,20 +4,27 @@ namespace Subodh\SmartAiAssistant\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
+use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
+use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
+use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
 use Subodh\SmartAiAssistant\Models\Conversation;
 use Subodh\SmartAiAssistant\Models\Message;
-use Subodh\SmartAiAssistant\Support\ErrorMatcher;
 use Subodh\SmartAiAssistant\Support\InputClassifier;
 
 class ErrorHelpController extends Controller
 {
-    protected InputClassifier $inputClassifier;
-
-    public function __construct()
-    {
-        $this->inputClassifier = new InputClassifier();
-    }
+    /**
+     * Intents that get a canned reply and are not stored.
+     */
+    private const NON_PROCESSABLE = [
+        StructuredProblem::INTENT_EMPTY,
+        StructuredProblem::INTENT_ABUSE,
+        StructuredProblem::INTENT_NOISE,
+        StructuredProblem::INTENT_GREETING,
+        StructuredProblem::INTENT_VAGUE,
+    ];
 
     /**
      * Handle the incoming help request.
@@ -25,9 +32,17 @@ class ErrorHelpController extends Controller
      * Expected payload:
      *   - error_text (string, required)
      *   - page_url (string, optional)
+     *
+     * Dependencies are method-injected, not constructor-injected: the router
+     * reuses controller instances, and these depend on per-request config.
      */
-    public function store(Request $request, UserContextResolver $userContextResolver)
-    {
+    public function store(
+        Request $request,
+        UserContextResolver $userContextResolver,
+        Interpreter $interpreter,
+        KnowledgeSource $knowledge,
+        InputClassifier $inputClassifier,
+    ) {
         $user = $userContextResolver->resolve($request);
 
         $validated = $request->validate([
@@ -43,17 +58,20 @@ class ErrorHelpController extends Controller
         $service   = config('smart-ai-assistant.default_service', 'AEPS');
 
         // =====================================================================
-        // STEP 1: Input Classification (Deterministic)
+        // STEP 1: Interpretation (Deterministic)
         // =====================================================================
-        $classification = $this->inputClassifier->classify($errorText);
+        $message   = new IncomingMessage($errorText, IncomingMessage::SOURCE_PAGE_ERROR, $pageUrl);
+        $problem   = $interpreter->interpret($message);
+        $inputType = $problem->signals['input_type'];
+        $category  = $problem->domains[0] ?? null;
 
         // =====================================================================
         // STEP 2: Handle non-processable input (no logging for noise)
         // =====================================================================
-        if (!$classification['should_process']) {
+        if (in_array($problem->intent, self::NON_PROCESSABLE, true)) {
             // Check for response loop - don't repeat the same guidance
             $lastResponse = session('smart_assistant_last_response');
-            $currentResponse = $classification['response'];
+            $currentResponse = $inputClassifier->cannedResponse($inputType);
             
             if ($lastResponse === $currentResponse) {
                 // Exit message to prevent loop
@@ -72,17 +90,17 @@ class ErrorHelpController extends Controller
             
             return response()->json([
                 'conversation_id' => null,
-                'source'          => $classification['type'],
+                'source'          => $inputType,
                 'answer_en'       => $currentResponse,
                 'answer_hi'       => null,
-                'input_type'      => $classification['type'],
+                'input_type'      => $inputType,
             ]);
         }
 
         // =====================================================================
         // STEP 3: Handle explicit escalation request
         // =====================================================================
-        if ($classification['should_escalate'] ?? false) {
+        if ($problem->intent === StructuredProblem::INTENT_REQUEST_HUMAN) {
             $escalationMessage = "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance.";
             
             return response()->json([
@@ -90,30 +108,29 @@ class ErrorHelpController extends Controller
                 'source'          => 'escalation',
                 'answer_en'       => $escalationMessage,
                 'answer_hi'       => "आपका अनुरोध दर्ज किया गया है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें या तुरंत सहायता के लिए हमारी हेल्पलाइन पर कॉल करें।",
-                'input_type'      => $classification['type'],
+                'input_type'      => $inputType,
             ]);
         }
 
         // =====================================================================
         // STEP 4: KB Matching (for valid input)
         // =====================================================================
-        $errorMatcher = app(ErrorMatcher::class);
-        $definition = $errorMatcher->findMatchingDefinition($service, $errorText);
+        $entry = $knowledge->find($message, $problem)[0] ?? null;
 
         // Build response
-        if ($definition) {
-            $prefix = $classification['category'] 
-                ? "I understand you are facing a **{$classification['category']}** issue.\n\n" 
+        if ($entry) {
+            $prefix = $category 
+                ? "I understand you are facing a **{$category}** issue.\n\n" 
                 : "";
 
-            $answerEn = $prefix . $definition->answer_en;
-            $answerHi = $definition->answer_hi ?? '';
+            $answerEn = $prefix . $entry->content['en'];
+            $answerHi = $entry->content['hi'] ?? '';
             $source   = 'kb';
-            $matchedId = $definition->id;
+            $matchedId = $entry->id;
         } else {
             // No KB match - check if input is meaningful enough to escalate
-            $prefix = $classification['category'] 
-                ? "I understand you are facing a **{$classification['category']}** issue, but " 
+            $prefix = $category 
+                ? "I understand you are facing a **{$category}** issue, but " 
                 : "";
 
             $answerEn = $prefix . "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support.";
@@ -154,8 +171,8 @@ class ErrorHelpController extends Controller
             'page_url'=> $pageUrl,
             'meta'    => [
                 'raw_error_text' => $errorText,
-                'input_type'     => $classification['type'],
-                'category'       => $classification['category'],
+                'input_type'     => $inputType,
+                'category'       => $category,
             ],
         ]);
 
@@ -165,8 +182,8 @@ class ErrorHelpController extends Controller
             'sender_type'    => 'user',
             'message'        => $errorText,
             'data'           => [
-                'input_type' => $classification['type'],
-                'category'   => $classification['category'],
+                'input_type' => $inputType,
+                'category'   => $category,
             ],
         ]);
 
@@ -177,8 +194,8 @@ class ErrorHelpController extends Controller
             'message'        => $answerEn . "\n" . $answerHi,
             'data'           => [
                 'source' => $source,
-                'input_type' => $classification['type'],
-                'category' => $classification['category'],
+                'input_type' => $inputType,
+                'category' => $category,
                 'matched_error_id' => $matchedId,
             ],
         ]);
@@ -188,8 +205,8 @@ class ErrorHelpController extends Controller
             'source'          => $source,
             'answer_en'       => $answerEn,
             'answer_hi'       => $answerHi,
-            'input_type'      => $classification['type'],
-            'category'        => $classification['category'],
+            'input_type'      => $inputType,
+            'category'        => $category,
         ]);
     }
 }

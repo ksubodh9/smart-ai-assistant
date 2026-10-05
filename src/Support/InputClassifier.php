@@ -191,6 +191,22 @@ class InputClassifier
     // RESPONSE TEMPLATES (Direct, no open questions)
     // =========================================================================
 
+    /**
+     * The canned reply for a non-processable input type, or null for types
+     * that go on to escalation or knowledge lookup.
+     */
+    public function cannedResponse(string $type): ?string
+    {
+        return match ($type) {
+            self::TYPE_EMPTY        => $this->getEmptyResponse(),
+            self::TYPE_NOISE        => $this->getNoiseResponse(),
+            self::TYPE_GREETING     => $this->getGreetingResponse(),
+            self::TYPE_VAGUE        => $this->getVagueResponse(),
+            self::TYPE_ABUSE_SEVERE => $this->getSevereAbuseResponse(),
+            default                 => null,
+        };
+    }
+
     protected function getEmptyResponse(): string
     {
         return "Please type your issue message.";
