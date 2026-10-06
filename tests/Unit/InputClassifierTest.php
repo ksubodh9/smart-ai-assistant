@@ -104,7 +104,7 @@ class InputClassifierTest extends TestCase
         bool $shouldProcess,
         bool $shouldEscalate
     ): void {
-        $result = (new InputClassifier())->classify($input);
+        $result = self::maddoxPayClassifier()->classify($input);
 
         $this->assertSame($type, $result['type'], 'type');
         $this->assertSame($category, $result['category'], 'category');
@@ -112,29 +112,55 @@ class InputClassifierTest extends TestCase
         $this->assertSame($shouldEscalate, $result['should_escalate'], 'should_escalate');
     }
 
-    public function test_non_processable_types_carry_a_canned_response(): void
+    /**
+     * @return array<string, array{0: string, 1: string}> input, type
+     */
+    public static function genericInputs(): array
     {
-        $classifier = new InputClassifier();
-
-        $this->assertSame('Please type your issue message.', $classifier->classify('')['response']);
-        $this->assertSame('Hello. Please state the issue you are facing.', $classifier->classify('hello')['response']);
-        $this->assertSame('I am ready to help. Please state your issue.', $classifier->classify('test')['response']);
-        $this->assertSame(
-            'Please specify the error message or the service (e.g., AEPS, PAN) you are having trouble with.',
-            $classifier->classify('help')['response']
-        );
-        $this->assertSame(
-            'Support is available for technical issues. Please keep the conversation respectful.',
-            $classifier->classify('fuck this')['response']
-        );
+        return [
+            'english greeting'       => ['hello', 'greeting'],
+            'english vague'          => ['help me', 'vague'],
+            'english severe abuse'   => ['fuck this', 'abuse_severe'],
+            'english mild abuse'     => ['useless app, payment failed', 'abuse_mild'],
+            'escalation'             => ['talk to a human', 'escalation_request'],
+            'noise'                  => ['test', 'noise'],
+            // Host vocabulary is not built in
+            'hindi greeting is text' => ['namaste', 'valid'],
+            'hinglish vague is text' => ['kuch gadbad hai', 'valid'],
+            'hindi slur is not built in' => ['chutiya app', 'valid'],
+        ];
     }
 
-    public function test_processable_types_have_no_canned_response(): void
+    #[DataProvider('genericInputs')]
+    public function test_package_defaults_are_generic_english(string $input, string $type): void
     {
-        $classifier = new InputClassifier();
+        $result = (new InputClassifier())->classify($input);
 
-        $this->assertNull($classifier->classify('talk to a human')['response']);
-        $this->assertNull($classifier->classify('aeps withdrawal failed')['response']);
-        $this->assertNull($classifier->classify('damn my recharge failed')['response']);
+        $this->assertSame($type, $result['type']);
+        $this->assertNull($result['category'], 'no categories by default');
+    }
+
+    public function test_configured_patterns_replace_only_the_types_they_name(): void
+    {
+        $classifier = new InputClassifier(['greeting' => ['/^salaam$/iu']]);
+
+        $this->assertSame('greeting', $classifier->classify('salaam')['type']);
+        $this->assertSame('valid', $classifier->classify('hello')['type'], 'default greetings replaced');
+        $this->assertSame('vague', $classifier->classify('help me')['type'], 'other types keep defaults');
+    }
+
+    public function test_first_matching_category_wins(): void
+    {
+        $classifier = new InputClassifier([], ['CARDS' => ['card'], 'PAYMENTS' => ['payment', 'card']]);
+
+        $this->assertSame('CARDS', $classifier->classify('card payment failed')['category']);
+        $this->assertSame('PAYMENTS', $classifier->classify('two payments failed')['category']);
+    }
+
+    private static function maddoxPayClassifier(): InputClassifier
+    {
+        $config = require __DIR__ . '/../Fixtures/maddoxpay-config.php';
+
+        return new InputClassifier($config['understanding']['patterns'], $config['understanding']['categories']);
     }
 }

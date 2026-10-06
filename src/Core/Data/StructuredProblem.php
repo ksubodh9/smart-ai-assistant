@@ -19,7 +19,7 @@ final class StructuredProblem
     public const INTENT_EMPTY = 'empty';
 
     /**
-     * @param  list<string>  $domains  Host-defined tags, e.g. ['AEPS']
+     * @param  list<string>  $domains  Host-defined tags, e.g. ['PAYMENTS']
      * @param  array<string, mixed>  $entities  Extracted values, e.g. ['reference_id' => '...']
      * @param  array<string, mixed>  $signals  e.g. ['abuse_level' => 'mild', 'input_type' => 'abuse_mild']
      */

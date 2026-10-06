@@ -26,8 +26,21 @@ abstract class TestCase extends Orchestra
         return ['Sentinel' => Sentinel::class];
     }
 
+    /**
+     * Host config applied on top of the package defaults. Feature tests run as
+     * MaddoxPay; override to return [] to test the generic package defaults.
+     */
+    protected function hostConfig(): array
+    {
+        return require __DIR__ . '/Fixtures/maddoxpay-config.php';
+    }
+
     protected function defineEnvironment($app)
     {
+        foreach ($this->hostConfig() as $key => $value) {
+            $app['config']->set("smart-ai-assistant.{$key}", $value);
+        }
+
         $app['config']->set('database.default', 'smart_ai_test');
         $app['config']->set('database.connections.smart_ai_test', [
             'driver'    => 'mysql',

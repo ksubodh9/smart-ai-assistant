@@ -23,8 +23,47 @@ return [
         'per_ip'      => env('SMART_AI_RATE_LIMIT_PER_IP', 300),
     ],
 
-    // Default service identifier (AEPS)
-    'default_service' => env('SMART_AI_DEFAULT_SERVICE', 'AEPS'),
+    // Knowledge domain searched by the knowledge base and recorded on
+    // conversations (the "service" column of the KB table).
+    'default_service' => env('SMART_AI_DEFAULT_SERVICE', 'general'),
+
+    // Features the host enables. Strategies that need a disabled capability
+    // are skipped.
+    'capabilities' => [
+        'knowledge'  => true,
+        'escalation' => true,
+    ],
+
+    // How a message is resolved: strategies run in this order and the first
+    // one that answers wins (keep a fallback last); then every guard runs.
+    'resolution' => [
+        'strategies' => [
+            \Subodh\SmartAiAssistant\Strategies\InputGuardStrategy::class,
+            \Subodh\SmartAiAssistant\Strategies\ExplicitEscalationStrategy::class,
+            \Subodh\SmartAiAssistant\Strategies\KnowledgeLookupStrategy::class,
+            \Subodh\SmartAiAssistant\Strategies\FallbackStrategy::class,
+        ],
+        'guards' => [
+            \Subodh\SmartAiAssistant\Resolution\Guards\ClarifyOnceGuard::class,
+            \Subodh\SmartAiAssistant\Resolution\Guards\LoopGuard::class,
+        ],
+    ],
+
+    // Host vocabulary for the rule-based interpreter.
+    'understanding' => [
+        // Regexes per input type; a type listed here replaces its default list
+        // (see InputClassifier::DEFAULT_PATTERNS). Types: greeting, vague,
+        // noise, abuse_mild, abuse_severe, escalation_request. Use the /u flag.
+        'patterns' => [],
+
+        // Category tag => keywords (whole words, plural "s" allowed), e.g.
+        // 'PAYMENTS' => ['payment', 'refund']. The first match is the category.
+        'categories' => [],
+    ],
+
+    // Reply texts; a key listed here replaces its default
+    // (see ResponseCatalog::DEFAULTS). Answers are ['en' => ..., 'hi' => ...].
+    'responses' => [],
 
     // CSS selectors used by the frontend widget to capture error text
     'error_selectors' => [

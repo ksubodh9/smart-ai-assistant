@@ -28,4 +28,24 @@ class PackageBoundaryTest extends TestCase
 
         $this->assertSame([], $offenders, 'Package source must not reference Sentinel');
     }
+
+    public function test_package_code_and_config_carry_no_maddoxpay_vocabulary(): void
+    {
+        // Services, categories and Hinglish patterns belong in the host's config
+        $vocabulary = '/\b(aeps|irctc|recharge|payout|maddox\w*|namaste|gadbad|bakwas|chutiya)\b/i';
+        $offenders = [];
+
+        foreach (['src', 'config'] as $dir) {
+            $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__ . '/../../' . $dir));
+
+            foreach ($files as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php'
+                    && preg_match($vocabulary, file_get_contents($file->getPathname()), $match)) {
+                    $offenders[] = "{$dir}/{$file->getFilename()}: {$match[0]}";
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders);
+    }
 }

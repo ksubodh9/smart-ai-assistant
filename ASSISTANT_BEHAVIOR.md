@@ -170,8 +170,9 @@ We received this error, it's not yet documented. Please contact support or forwa
 
 ### Backend Enforcement (V1)
 
-- **Class:** `Subodh\SmartAiAssistant\Support\InputClassifier`
-- **Controller:** `ErrorHelpController::store()` uses InputClassifier before KB matching
+- **Classification:** `Support\InputClassifier` (via `Understanding\RuleBasedInterpreter`)
+- **Resolution:** `Strategies\InputGuardStrategy` (canned replies), `ExplicitEscalationStrategy`, `KnowledgeLookupStrategy`, `FallbackStrategy`, run in order by `Core\Resolution\ResolverPipeline`
+- **Never loop / prompt once:** `Resolution\Guards\LoopGuard` and `ClarifyOnceGuard`, applied to every resolution
 - **No conversation record** is created for non-processable input (empty, greeting, vague, severe abuse)
 - **Mild abuse** is logged in conversation metadata but processed normally
 

@@ -54,7 +54,7 @@ class SeedKbFromCsv extends Command
             return 1;
         }
 
-        $service = $this->option('domain') ?: config('smart-ai-assistant.default_service', 'AEPS');
+        $service = $this->option('domain') ?: config('smart-ai-assistant.default_service', 'general');
         $count = 0;
 
         $isHeader = true;

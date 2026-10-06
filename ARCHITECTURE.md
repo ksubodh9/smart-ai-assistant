@@ -303,6 +303,44 @@ SmartAssistant (Main Controller)
     └── removeFile()
 ```
 
+## ⚙️ Backend Resolution Pipeline
+
+`POST /smart-assistant/help` is handled by a thin controller that hands the
+work to small, replaceable classes. The flow is the same for every host; what
+differs between hosts is configuration.
+
+```
+validate (max 1000 chars, page path only)
+  → UserContextResolver        who is the user (host decides)
+  → Interpreter                text → StructuredProblem (intent, domains, signals)
+  → ResolverPipeline
+       strategies, in config order, first non-null wins:
+         InputGuardStrategy          greeting / vague / noise / abuse → canned reply
+         ExplicitEscalationStrategy  "talk to a human"     (capability: escalation)
+         KnowledgeLookupStrategy     KnowledgeSource match (capability: knowledge)
+         FallbackStrategy            "not documented" + raise-ticket hint
+       guards, applied to the winner:
+         ClarifyOnceGuard            same canned reply twice → exit
+         LoopGuard                   same answer twice → exit
+  → EloquentConversationStore  only if Resolution::persist; user text redacted
+  → ResponseSerializer         {conversation_id, source, answer_en, answer_hi, input_type, category?}
+```
+
+| Piece | Where | Replace via |
+|---|---|---|
+| Contracts and data objects | `src/Core/Contracts`, `src/Core/Data` | — |
+| `ResolverPipeline` | `src/Core/Resolution` | — |
+| Strategies | `src/Strategies` | `resolution.strategies` (add host classes) |
+| Guards | `src/Resolution/Guards` | `resolution.guards` |
+| `RuleBasedInterpreter` + `InputClassifier` | `src/Understanding`, `src/Support` | `understanding.patterns`, `understanding.categories` |
+| `DatabaseKnowledgeSource` | `src/Knowledge` | `default_service` (the domain searched) |
+| Reply texts | `Support\ResponseCatalog::DEFAULTS` | `responses` (per key) |
+| Identity | `Support\LaravelAuthUserContextResolver` | `user_resolver` |
+| Redaction | `Support\DefaultRedactor` | `redactor` |
+
+Guard state (last reply sent) lives in the session through the
+`ConversationState` contract; it moves to the conversation in plan step 5.
+
 ## 🔐 Security Considerations
 
 1. **CSRF Protection**: All API calls include CSRF token

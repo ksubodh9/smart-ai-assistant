@@ -4,9 +4,13 @@ namespace Subodh\SmartAiAssistant\Support;
 
 /**
  * InputClassifier - Deterministic classification of user input
- * 
+ *
  * This class categorizes user input into actionable types for the assistant.
  * It does NOT use AI/ML - only pattern matching for predictable behavior.
+ *
+ * The priority order of the checks is fixed here; the patterns for each type
+ * and the category keywords come from config (understanding.patterns and
+ * understanding.categories). The defaults below are generic English.
  */
 class InputClassifier
 {
@@ -20,142 +24,111 @@ class InputClassifier
     const TYPE_NOISE = 'noise';
     const TYPE_ESCALATION_REQUEST = 'escalation_request';
 
-    // Category types for tagging
-    const CAT_PAN      = 'PAN';
-    const CAT_RECHARGE = 'RECHARGE';
-    const CAT_AEPS     = 'AEPS';
-    const CAT_PAYOUT   = 'PAYOUT';
-    const CAT_KYC      = 'KYC';
-    const CAT_IRCTC    = 'IRCTC';
-    const CAT_INFO     = 'INFO';
-
     /**
-     * Greeting patterns
+     * Default patterns per type. Use the /u flag: input is UTF-8.
      */
-    protected array $greetingPatterns = [
-        '/^(hi|hello|hey|hii+|helo|hlo|namaste|namaskar)[\s\!\.\?]*$/iu',
-        '/^(good\s*(morning|afternoon|evening|night|day))[\s\!\.\?]*$/iu',
-        '/^(howdy|sup|yo|hiya)[\s\!\.\?]*$/iu',
+    public const DEFAULT_PATTERNS = [
+        self::TYPE_GREETING => [
+            '/^(hi|hello|hey|hii+|helo|hlo)[\s\!\.\?]*$/iu',
+            '/^(good\s*(morning|afternoon|evening|night|day))[\s\!\.\?]*$/iu',
+            '/^(howdy|sup|yo|hiya)[\s\!\.\?]*$/iu',
+        ],
+        self::TYPE_VAGUE => [
+            '/^(help|help me|need help|i need help)[\s\!\.\?]*$/iu',
+            '/^(issue|problem|error|not working)[\s\!\.\?]*$/iu',
+            '/^(something (is )?(wrong|broken|not working))[\s\!\.\?]*$/iu',
+            '/^(it\'?s? not working)[\s\!\.\?]*$/iu',
+            '/^(please help)[\s\!\.\?]*$/iu',
+        ],
+        self::TYPE_NOISE => [
+            '/^(test|testing|123|abc|xyz|qwerty|asdf)[\s]*$/iu',
+            '/^([a-z])\1{2,}$/iu', // repeated chars like 'aaaa'
+            '/^[\W\d\s]+$/iu', // only symbols, numbers, whitespace
+            '/^.{1,2}$/iu', // 1-2 char inputs
+        ],
+        self::TYPE_ABUSE_MILD => [
+            '/\b(damn|crap|sucks|stupid|useless|rubbish|pathetic|worst)\b/iu',
+        ],
+        self::TYPE_ABUSE_SEVERE => [
+            '/\b(f+u+c+k+|shit|bastard|bitch|ass+hole)\b/iu',
+            '/\b(kill|murder|die|threat)\b/iu',
+        ],
+        // Explicit user request for human support
+        self::TYPE_ESCALATION_REQUEST => [
+            '/\b(talk to (a\s*)?(human|agent|person|support|executive))\b/iu',
+            '/\b(call me|call back|contact me)\b/iu',
+            '/\b(escalate|escalation|raise (a\s*)?complaint)\b/iu',
+            '/\b(speak to (a\s*)?(manager|supervisor))\b/iu',
+            '/\b(need (a\s*)?(human|real person))\b/iu',
+            '/\b(this (is\s*)?(not helping|useless))\b/iu',
+        ],
     ];
 
     /**
-     * Vague input patterns
+     * @var array<string, list<string>>
      */
-    protected array $vaguePatterns = [
-        '/^(help|help me|need help|i need help)[\s\!\.\?]*$/iu',
-        '/^(issue|problem|error|not working)[\s\!\.\?]*$/iu',
-        '/^(something (is )?(wrong|broken|not working))[\s\!\.\?]*$/iu',
-        '/^(it\'?s? not working)[\s\!\.\?]*$/iu',
-        '/^(please help)[\s\!\.\?]*$/iu',
-        '/^(kuch gadbad hai|kaam nahi kar raha)[\s\!\.\?]*$/iu',
-    ];
+    protected array $patterns;
 
     /**
-     * Noise patterns (test, random, etc)
+     * @param  array<string, list<string>>  $patterns  Replaces the default list of each type it names
+     * @param  array<string, list<string>>  $categories  Category tag => keywords (whole words). First match wins.
      */
-    protected array $noisePatterns = [
-        '/^(test|testing|123|abc|xyz|qwerty|asdf)[\s]*$/iu',
-        '/^([a-z])\1{2,}$/iu', // repeated chars like 'aaaa'
-        '/^[\W\d\s]+$/iu', // only symbols, numbers, whitespace
-        '/^.{1,2}$/iu', // 1-2 char inputs
-    ];
-
-    /**
-     * Mild abuse patterns
-     */
-    protected array $mildAbusePatterns = [
-        '/\b(damn|crap|sucks|stupid|useless|rubbish|pathetic|worst)\b/iu',
-        '/\b(bakwas|bekaar|wahiyat|ghatiya)\b/iu',
-    ];
-
-    /**
-     * Severe abuse patterns
-     */
-    protected array $severeAbusePatterns = [
-        '/\b(f+u+c+k+|shit|bastard|bitch|ass+hole)\b/iu',
-        '/\b(kill|murder|die|threat)\b/iu',
-        '/\b(madarch[o0]d|bhench[o0]d|chutiya|gandu|harami|saala|kutta|kamina)\b/iu',
-        '/\b(randi|hijra|chakka)\b/iu',
-    ];
-
-    /**
-     * Escalation request patterns (explicit user request for human support)
-     */
-    protected array $escalationPatterns = [
-        '/\b(talk to (a\s*)?(human|agent|person|support|executive))\b/iu',
-        '/\b(call me|call back|contact me)\b/iu',
-        '/\b(escalate|escalation|raise (a\s*)?complaint)\b/iu',
-        '/\b(speak to (a\s*)?(manager|supervisor))\b/iu',
-        '/\b(need (a\s*)?(human|real person))\b/iu',
-        '/\b(this (is\s*)?(not helping|useless))\b/iu',
-    ];
-
-    /**
-     * Category keywords map
-     */
-    protected array $categoryMap = [
-        self::CAT_PAN      => ['pan', 'nsdl', 'uti', 'correction', 'pan card'],
-        self::CAT_RECHARGE => ['recharge', 'topup', 'jio', 'airtel', 'vi', 'vodafone', 'dth', 'mobile'],
-        self::CAT_AEPS     => ['aeps', 'withdrawal', 'balance enquiry', 'mini statement', 'fingerprint', 'biometric', 'aadhaar pay'],
-        self::CAT_PAYOUT   => ['payout', 'transfer', 'imps', 'neft', 'bank', 'account', 'beneficiary'],
-        self::CAT_KYC      => ['kyc', 'document', 'aadhaar', 'verification', 'upload', 'ekyc'],
-        self::CAT_IRCTC    => ['irctc', 'train', 'booking', 'cancellation', 'ticket', 'railway'],
-    ];
+    public function __construct(array $patterns = [], protected array $categories = [])
+    {
+        $this->patterns = array_replace(self::DEFAULT_PATTERNS, $patterns);
+    }
 
     public function classify(string $input): array
     {
         $trimmed = trim($input);
-        
+
         // 1. Empty check
         if (empty($trimmed)) {
-            return $this->result(self::TYPE_EMPTY, false, $this->getEmptyResponse());
+            return $this->result(self::TYPE_EMPTY, false);
         }
 
         // Patterns are Unicode-aware (/u) and do not match invalid UTF-8 at all
         if (!mb_check_encoding($trimmed, 'UTF-8')) {
-            return $this->result(self::TYPE_NOISE, false, $this->getNoiseResponse());
+            return $this->result(self::TYPE_NOISE, false);
         }
 
         // 2. Severe abuse check
-        if ($this->matchesPatterns($trimmed, $this->severeAbusePatterns)) {
-            return $this->result(self::TYPE_ABUSE_SEVERE, false, $this->getSevereAbuseResponse());
+        if ($this->matches($trimmed, self::TYPE_ABUSE_SEVERE)) {
+            return $this->result(self::TYPE_ABUSE_SEVERE, false);
         }
 
         // 3. Noise check
-        if ($this->matchesPatterns($trimmed, $this->noisePatterns)) {
-            return $this->result(self::TYPE_NOISE, false, $this->getNoiseResponse());
+        if ($this->matches($trimmed, self::TYPE_NOISE)) {
+            return $this->result(self::TYPE_NOISE, false);
         }
 
         // 4. Greeting-only check
-        if ($this->matchesPatterns($trimmed, $this->greetingPatterns)) {
-            return $this->result(self::TYPE_GREETING, false, $this->getGreetingResponse());
+        if ($this->matches($trimmed, self::TYPE_GREETING)) {
+            return $this->result(self::TYPE_GREETING, false);
         }
 
         // 5. Vague input check
-        if ($this->matchesPatterns($trimmed, $this->vaguePatterns)) {
-            return $this->result(self::TYPE_VAGUE, false, $this->getVagueResponse());
+        if ($this->matches($trimmed, self::TYPE_VAGUE)) {
+            return $this->result(self::TYPE_VAGUE, false);
         }
 
         // 6. Explicit escalation request check
-        if ($this->matchesPatterns($trimmed, $this->escalationPatterns)) {
-            return $this->result(self::TYPE_ESCALATION_REQUEST, true, null, null, true);
+        if ($this->matches($trimmed, self::TYPE_ESCALATION_REQUEST)) {
+            return $this->result(self::TYPE_ESCALATION_REQUEST, true, null, true);
         }
 
         // 7. Mild abuse check (process normally)
-        if ($this->matchesPatterns($trimmed, $this->mildAbusePatterns)) {
-            return $this->result(self::TYPE_ABUSE_MILD, true, null);
+        if ($this->matches($trimmed, self::TYPE_ABUSE_MILD)) {
+            return $this->result(self::TYPE_ABUSE_MILD, true);
         }
 
-        // 8. Category tagging
-        $category = $this->detectCategory($trimmed);
-
-        // 9. Valid input
-        return $this->result(self::TYPE_VALID, true, null, $category);
+        // 8. Category tagging, 9. Valid input
+        return $this->result(self::TYPE_VALID, true, $this->detectCategory($trimmed));
     }
 
-    protected function matchesPatterns(string $input, array $patterns): bool
+    protected function matches(string $input, string $type): bool
     {
-        foreach ($patterns as $pattern) {
+        foreach ($this->patterns[$type] ?? [] as $pattern) {
             if (preg_match($pattern, $input)) {
                 return true;
             }
@@ -165,11 +138,11 @@ class InputClassifier
 
     protected function detectCategory(string $input): ?string
     {
-        foreach ($this->categoryMap as $category => $keywords) {
+        foreach ($this->categories as $category => $keywords) {
             foreach ($keywords as $keyword) {
                 // Whole words only ("vi" must not match "device"); a plural "s" is allowed
                 if (preg_match('/\b' . preg_quote($keyword, '/') . 's?\b/iu', $input)) {
-                    return $category;
+                    return (string) $category;
                 }
             }
         }
@@ -177,64 +150,16 @@ class InputClassifier
     }
 
     protected function result(
-        string $type, 
-        bool $shouldProcess, 
-        ?string $response, 
+        string $type,
+        bool $shouldProcess,
         ?string $category = null,
         bool $shouldEscalate = false
     ): array {
         return [
             'type' => $type,
             'should_process' => $shouldProcess,
-            'response' => $response,
             'category' => $category,
             'should_escalate' => $shouldEscalate,
         ];
     }
-
-    // =========================================================================
-    // RESPONSE TEMPLATES (Direct, no open questions)
-    // =========================================================================
-
-    /**
-     * The canned reply for a non-processable input type, or null for types
-     * that go on to escalation or knowledge lookup.
-     */
-    public function cannedResponse(string $type): ?string
-    {
-        return match ($type) {
-            self::TYPE_EMPTY        => $this->getEmptyResponse(),
-            self::TYPE_NOISE        => $this->getNoiseResponse(),
-            self::TYPE_GREETING     => $this->getGreetingResponse(),
-            self::TYPE_VAGUE        => $this->getVagueResponse(),
-            self::TYPE_ABUSE_SEVERE => $this->getSevereAbuseResponse(),
-            default                 => null,
-        };
-    }
-
-    protected function getEmptyResponse(): string
-    {
-        return "Please type your issue message.";
-    }
-
-    protected function getNoiseResponse(): string
-    {
-        return "I am ready to help. Please state your issue.";
-    }
-
-    protected function getGreetingResponse(): string
-    {
-        return "Hello. Please state the issue you are facing.";
-    }
-
-    protected function getVagueResponse(): string
-    {
-        return "Please specify the error message or the service (e.g., AEPS, PAN) you are having trouble with.";
-    }
-
-    protected function getSevereAbuseResponse(): string
-    {
-        return "Support is available for technical issues. Please keep the conversation respectful.";
-    }
 }
-

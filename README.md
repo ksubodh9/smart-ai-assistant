@@ -120,6 +120,25 @@ Edit `resources/views/components/widget.blade.php`:
 <div class="sa-welcome-title">Hello! I'm YOUR_NAME</div>
 ```
 
+### Host configuration checklist
+
+The package defaults are generic (English replies, no categories, knowledge
+domain `general`). Publish the config once
+(`php artisan vendor:publish --tag=smart-ai-assistant-config`) and set:
+
+1. `middleware`: keep `web` and add your auth middleware.
+2. `user_resolver`: only if you don't use Laravel's auth guard (e.g. Sentinel).
+3. `default_service`: the knowledge domain your KB rows use
+   (`smart-ai:seed-kb file.xlsx --domain=...`).
+4. `understanding.patterns` / `understanding.categories`: your language and
+   product vocabulary. A pattern type you list replaces its defaults.
+5. `responses`: reply texts to change, per key, optionally with `hi`.
+6. `resolution.strategies`: add your own `ResolutionStrategy` classes; keep
+   `FallbackStrategy` last.
+
+The config is merged one level deep: a top-level key in your file replaces the
+package's value for that key entirely.
+
 ### Add Error Selectors
 
 Edit `public/js/assistant.js`:

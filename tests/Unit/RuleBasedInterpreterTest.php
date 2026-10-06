@@ -38,7 +38,9 @@ class RuleBasedInterpreterTest extends TestCase
         string $inputType,
         string $abuseLevel
     ): void {
-        $problem = (new RuleBasedInterpreter(new InputClassifier()))->interpret(new IncomingMessage($input));
+        $config = require __DIR__ . '/../Fixtures/maddoxpay-config.php';
+        $classifier = new InputClassifier($config['understanding']['patterns'], $config['understanding']['categories']);
+        $problem = (new RuleBasedInterpreter($classifier))->interpret(new IncomingMessage($input));
 
         $this->assertSame($intent, $problem->intent);
         $this->assertSame($domains, $problem->domains);
