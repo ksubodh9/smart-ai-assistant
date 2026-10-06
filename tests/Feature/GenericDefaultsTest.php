@@ -38,10 +38,16 @@ class GenericDefaultsTest extends TestCase
 
     public function test_unknown_has_no_category_prefix_and_no_hindi(): void
     {
+        $unknown = "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support.";
+
         $this->ask('aeps withdrawal failed')->assertExactJson([
+            'protocol'        => 1,
             'conversation_id' => Conversation::sole()->id,
+            'blocks'          => [['type' => 'text', 'format' => 'basic', 'locale' => 'en', 'text' => $unknown]],
+            'actions'         => [['type' => 'action', 'id' => 'escalate', 'label' => 'Raise ticket', 'confirm' => true]],
+            'meta'            => ['source' => 'unknown', 'input_type' => 'valid', 'category' => null],
             'source'          => 'unknown',
-            'answer_en'       => "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support.",
+            'answer_en'       => $unknown,
             'answer_hi'       => null,
             'input_type'      => 'valid',
             'category'        => null,

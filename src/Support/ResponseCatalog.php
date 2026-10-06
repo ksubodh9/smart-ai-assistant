@@ -22,6 +22,12 @@ class ResponseCatalog
         // The user asked for a human
         'escalation'   => ['en' => "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance."],
 
+        // Label of the "raise a ticket" action offered with unresolved replies
+        'escalate_action' => ['en' => 'Raise ticket'],
+
+        // A guest tried to raise a support request
+        'escalation_login_required' => ['en' => 'Please log in to contact support.'],
+
         // No knowledge matched
         'unknown'      => ['en' => "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support."],
 

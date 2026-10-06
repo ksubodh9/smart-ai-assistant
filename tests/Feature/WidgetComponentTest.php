@@ -56,6 +56,42 @@ class WidgetComponentTest extends TestCase
             ->assertSee('id="sa-user-phone" value="9999999999"', false);
     }
 
+    public function test_server_escalation_renders_no_user_data_inputs(): void
+    {
+        config(['smart-ai-assistant.features.server_escalation' => true]);
+        Sentinel::actingAs((object) [
+            'id'        => 7,
+            'maddox_id' => 'MDX0007',
+            'full_name' => 'Test Retailer',
+            'phone_no'  => '9999999999',
+        ]);
+
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertDontSee('sa-user-maddox-id', false)
+            ->assertDontSee('MDX0007', false)
+            ->assertDontSee('9999999999', false);
+    }
+
+    public function test_widget_config_block_carries_endpoints_and_features(): void
+    {
+        config(['smart-ai-assistant.features.server_escalation' => true]);
+
+        $html = (string) $this->blade('<x-smart-assistant-widget />');
+
+        $this->assertMatchesRegularExpression('#<script type="application/json" id="sa-config">(.*?)</script>#s', $html);
+        preg_match('#<script type="application/json" id="sa-config">(.*?)</script>#s', $html, $match);
+        $this->assertSame([
+            'endpoints' => ['help' => '/smart-assistant/help', 'escalate' => '/smart-assistant/escalate'],
+            'features'  => ['server_escalation' => true],
+        ], json_decode($match[1], true));
+    }
+
+    public function test_file_input_accepts_the_configured_attachment_types(): void
+    {
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertSee('accept=".jpg,.jpeg,.png,.pdf"', false);
+    }
+
     public function test_html2canvas_is_bundled_and_loaded_before_the_widget_scripts(): void
     {
         $this->blade('<x-smart-assistant-widget />')

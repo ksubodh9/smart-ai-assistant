@@ -23,6 +23,46 @@ return [
         'per_ip'      => env('SMART_AI_RATE_LIMIT_PER_IP', 300),
     ],
 
+    // Stored conversations. The widget sends back the conversation id it got,
+    // so one chat is one conversation; an id that belongs to someone else or
+    // has been idle too long starts a new conversation.
+    'conversations' => [
+        // Minutes without messages after which a new conversation starts
+        'idle_minutes' => 120,
+
+        // Days to keep conversations; smart-ai:prune deletes older ones.
+        // null keeps them forever (the command then does nothing).
+        'retention_days' => env('SMART_AI_RETENTION_DAYS'),
+    ],
+
+    // Support requests ("Raise Ticket") sent to POST /smart-assistant/escalate.
+    'escalation' => [
+        // Class that hands the request to the host's support system. It must
+        // implement Subodh\SmartAiAssistant\Core\Contracts\EscalationChannel.
+        // The default rejects every request; LogEscalationChannel only writes
+        // to the log (for development).
+        'channel' => \Subodh\SmartAiAssistant\Escalation\NullEscalationChannel::class,
+
+        // Longest message the user may type (characters)
+        'max_message_length' => 1000,
+
+        // Files the user may attach; keep these within the host's own limits
+        'attachments' => [
+            'mimes'     => ['jpg', 'jpeg', 'png', 'pdf'],
+            'max_kb'    => 2048,
+            'max_files' => 2,
+        ],
+    ],
+
+    // Switches for features that are being rolled out
+    'features' => [
+        // true: the widget sends typed messages and attachments to
+        // /smart-assistant/escalate, and 'escalation.channel' handles them.
+        // false: the widget posts them to the host's own ticket endpoint as
+        // before, using identity fields rendered into the page.
+        'server_escalation' => env('SMART_AI_SERVER_ESCALATION', false),
+    ],
+
     // Knowledge domain searched by the knowledge base and recorded on
     // conversations (the "service" column of the KB table).
     'default_service' => env('SMART_AI_DEFAULT_SERVICE', 'general'),

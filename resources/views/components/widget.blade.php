@@ -4,6 +4,21 @@
  * Modern, WhatsApp/ChatGPT-inspired UI with error detection and file attachments
  */
 ?>
+@php
+    $saServerEscalation = (bool) config('smart-ai-assistant.features.server_escalation');
+    $saAttachmentTypes = config('smart-ai-assistant.escalation.attachments.mimes', ['jpg', 'jpeg', 'png', 'pdf']);
+    // Read by the widget scripts; holds no personal data
+    $saConfig = [
+        'endpoints' => [
+            'help'     => route('smart-assistant.help', [], false),
+            'escalate' => route('smart-assistant.escalate', [], false),
+        ],
+        'features' => [
+            'server_escalation' => $saServerEscalation,
+        ],
+    ];
+@endphp
+<script type="application/json" id="sa-config">@json($saConfig)</script>
 <div id="smart-assistant-widget">
     <!-- Floating Toggle Button -->
     <button id="smart-assistant-toggle" aria-label="Open Smart Assistant">
@@ -70,7 +85,7 @@
                 </button>
 
                 <!-- Hidden File Input -->
-                <input type="file" id="sa-file-upload" style="display: none;" accept="image/*,.pdf,.doc,.docx">
+                <input type="file" id="sa-file-upload" style="display: none;" accept="{{ '.' . implode(',.', $saAttachmentTypes) }}">
 
                 <!-- Message Textarea -->
                 <textarea 
@@ -95,8 +110,8 @@
             Powered by Maddox AI
         </div>
 
-        <!-- Hidden User Data for Chat (MaddoxPay ticket endpoint; temporary, removed when escalation moves server-side) -->
-        @if(class_exists('Sentinel') && Sentinel::check())
+        <!-- Hidden User Data for the host ticket endpoint; not rendered with server escalation, removed once that is the default -->
+        @if(! $saServerEscalation && class_exists('Sentinel') && Sentinel::check())
             @php $user = Sentinel::getUser(); @endphp
             <input type="hidden" id="sa-user-maddox-id" value="{{ $user->maddox_id }}">
             <input type="hidden" id="sa-user-name" value="{{ $user->full_name }}">

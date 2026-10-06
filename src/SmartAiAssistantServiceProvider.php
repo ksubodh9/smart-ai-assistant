@@ -7,12 +7,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
-use Subodh\SmartAiAssistant\Core\Contracts\ConversationState;
+use Subodh\SmartAiAssistant\Core\Contracts\ConversationStore;
+use Subodh\SmartAiAssistant\Core\Contracts\EscalationChannel;
 use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
 use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
+use Subodh\SmartAiAssistant\Escalation\NullEscalationChannel;
 use Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource;
 use Subodh\SmartAiAssistant\Persistence\EloquentConversationStore;
 use Subodh\SmartAiAssistant\Resolution\StrategyRegistry;
@@ -20,7 +22,6 @@ use Subodh\SmartAiAssistant\Support\DefaultRedactor;
 use Subodh\SmartAiAssistant\Support\InputClassifier;
 use Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver;
 use Subodh\SmartAiAssistant\Support\ResponseCatalog;
-use Subodh\SmartAiAssistant\Support\SessionConversationState;
 use Subodh\SmartAiAssistant\Understanding\RuleBasedInterpreter;
 
 class SmartAiAssistantServiceProvider extends ServiceProvider
@@ -84,6 +85,11 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             return $app->make(config('smart-ai-assistant.user_resolver', LaravelAuthUserContextResolver::class));
         });
 
+        // Where confirmed support requests go: usually the host's ticket system
+        $this->app->bind(EscalationChannel::class, function ($app) {
+            return $app->make(config('smart-ai-assistant.escalation.channel', NullEscalationChannel::class));
+        });
+
         $this->app->bind(Redactor::class, function ($app) {
             return $app->make(config('smart-ai-assistant.redactor', DefaultRedactor::class));
         });
@@ -106,14 +112,12 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             return new DatabaseKnowledgeSource(config('smart-ai-assistant.default_service', 'general'));
         });
 
-        $this->app->bind(ConversationState::class, function ($app) {
-            return new SessionConversationState($app->make('session.store'));
-        });
-
-        $this->app->bind(EloquentConversationStore::class, function ($app) {
+        // Conversations also hold the guards' state (see ConversationStore::state)
+        $this->app->bind(ConversationStore::class, function ($app) {
             return new EloquentConversationStore(
                 $app->make(Redactor::class),
                 config('smart-ai-assistant.default_service', 'general'),
+                (int) config('smart-ai-assistant.conversations.idle_minutes', 120),
             );
         });
 
@@ -135,6 +139,7 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 \Subodh\SmartAiAssistant\Console\Commands\SeedKbFromCsv::class,
+                \Subodh\SmartAiAssistant\Console\Commands\PruneConversations::class,
             ]);
         }
     }

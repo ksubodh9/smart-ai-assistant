@@ -37,7 +37,24 @@ class ResolutionPipelineTest extends TestCase
 
     private function context(string $text): ConversationContext
     {
-        return new ConversationContext(UserContext::guest(), new IncomingMessage($text), app(ConversationState::class));
+        return new ConversationContext(UserContext::guest(), new IncomingMessage($text), new class implements ConversationState {
+            private array $values = [];
+
+            public function get(string $key): mixed
+            {
+                return $this->values[$key] ?? null;
+            }
+
+            public function put(string $key, mixed $value): void
+            {
+                $this->values[$key] = $value;
+            }
+
+            public function forget(string $key): void
+            {
+                unset($this->values[$key]);
+            }
+        });
     }
 
     public function test_disabling_the_knowledge_capability_skips_the_kb(): void

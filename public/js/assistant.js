@@ -101,26 +101,11 @@ class SmartAssistant {
         if (result.success && result.data) {
             const data = result.data;
 
-            // Server answers are text with optional **bold**; never render them as HTML
-            const sections = [];
-
-            if (data.answer_en) {
-                sections.push(`**💡 Solution:**\n${data.answer_en}`);
-            }
-
-            if (data.answer_hi) {
-                sections.push(`**🇮🇳 हिंदी में:**\n${data.answer_hi}`);
-            }
-
-            const responseText = sections.length
-                ? sections.join('\n\n')
-                : 'I found information about this error, but couldn\'t format it properly. Please try rephrasing your question.';
-
-            this.uiManager.addFormattedMessage(responseText);
+            this.renderResponse(data);
             this.uiManager.setStatus('Ready to help');
 
             // If unknown error, suggest manual query
-            if (data.source === 'unknown') {
+            if ((data.meta?.source ?? data.source) === 'unknown') {
                 setTimeout(() => {
                     this.uiManager.addChatMessage(
                         'If you need more help, feel free to type your question below or attach a screenshot.',
@@ -150,6 +135,36 @@ class SmartAssistant {
             this.uiManager.enableChatInput();
             if (this.chatInput) this.chatInput.focus();
         }, 500);
+    }
+
+    /**
+     * Show an assistant reply. Uses the response blocks when the server sends
+     * them (protocol 1), else the legacy answer_en/answer_hi fields.
+     * Server text may hold **bold**; it is never rendered as HTML.
+     */
+    renderResponse(data) {
+        const headings = {
+            en: '**💡 Solution:**',
+            hi: '**🇮🇳 हिंदी में:**'
+        };
+        const sections = [];
+
+        if (Array.isArray(data.blocks)) {
+            data.blocks.forEach(block => {
+                // Only known block types are shown; others are skipped
+                if (block && block.type === 'text' && block.text) {
+                    const heading = headings[block.locale];
+                    sections.push(heading ? `${heading}\n${block.text}` : String(block.text));
+                }
+            });
+        } else {
+            if (data.answer_en) sections.push(`${headings.en}\n${data.answer_en}`);
+            if (data.answer_hi) sections.push(`${headings.hi}\n${data.answer_hi}`);
+        }
+
+        this.uiManager.addFormattedMessage(sections.length
+            ? sections.join('\n\n')
+            : 'I found information about this error, but couldn\'t format it properly. Please try rephrasing your question.');
     }
 
     async handleSendMessage() {
@@ -272,8 +287,11 @@ class SmartAssistant {
             // NOW clear the file preview since it was sent successfully
             this.filePreviewManager.clearPreview();
 
+            // 'reference' from the package endpoint, 'complaint_id' from the host ticket endpoint
+            const reference = result.data?.reference || result.data?.complaint_id;
             this.uiManager.addChatMessage(
-                `✅ ${result.message || 'Your message has been sent successfully. Our support team will get back to you soon.'}`,
+                `✅ ${result.message || 'Your message has been sent successfully. Our support team will get back to you soon.'}`
+                    + (reference ? `\nReference: ${reference}` : ''),
                 false
             );
             this.uiManager.setStatus('Message sent');

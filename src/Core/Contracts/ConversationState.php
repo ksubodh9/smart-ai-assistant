@@ -4,7 +4,7 @@ namespace Subodh\SmartAiAssistant\Core\Contracts;
 
 /**
  * Small key-value state that guards keep between messages (e.g. the last
- * reply sent). Session-backed for now; per conversation later.
+ * reply sent). Kept per conversation; see ConversationStore::state().
  */
 interface ConversationState
 {

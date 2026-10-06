@@ -4,10 +4,47 @@
 class APIManager {
     constructor() {
         this.csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        // Rendered by the widget view; older published views have no config block
+        const config = this.readConfig();
+        this.serverEscalation = config.features?.server_escalation === true;
         this.endpoints = {
-            help: '/smart-assistant/help',
+            help: config.endpoints?.help || '/smart-assistant/help',
+            escalate: config.endpoints?.escalate || '/smart-assistant/escalate',
             ticket: '/customer-support/raise/ticket'
         };
+    }
+
+    /**
+     * The server's conversation id, kept per browser tab so a chat continues
+     * across page loads. The server only honours it for the same user/session.
+     */
+    getConversationId() {
+        try {
+            return sessionStorage.getItem('smart-assistant:conversation-id') || this.conversationId || null;
+        } catch (e) {
+            return this.conversationId || null;
+        }
+    }
+
+    rememberConversationId(json) {
+        const id = json && json.conversation_id;
+        if (!id) return;
+        this.conversationId = String(id);
+        try {
+            sessionStorage.setItem('smart-assistant:conversation-id', this.conversationId);
+        } catch (e) {
+            // Storage blocked: the in-memory copy still covers this page
+        }
+    }
+
+    readConfig() {
+        try {
+            return JSON.parse(document.getElementById('sa-config')?.textContent || '{}');
+        } catch (e) {
+            console.error('Smart Assistant: invalid sa-config block', e);
+            return {};
+        }
     }
 
     async sendErrorQuery(errorText, pageUrl) {
@@ -20,7 +57,8 @@ class APIManager {
                 },
                 body: JSON.stringify({
                     error_text: errorText,
-                    page_url: pageUrl || window.location.href
+                    page_url: pageUrl || window.location.href,
+                    conversation_id: this.getConversationId()
                 })
             });
 
@@ -36,6 +74,7 @@ class APIManager {
 
             try {
                 const json = JSON.parse(text);
+                this.rememberConversationId(json);
                 return {
                     success: true,
                     data: json
@@ -59,6 +98,10 @@ class APIManager {
     }
 
     async sendChatMessage(message, attachments = [], errorContext = null) {
+        if (this.serverEscalation) {
+            return this.escalate(message, attachments, errorContext);
+        }
+
         try {
             const userData = this.getUserData();
 
@@ -131,6 +174,80 @@ class APIManager {
             }
         } catch (error) {
             console.error('Send Message Error:', error);
+            return {
+                success: false,
+                error: 'network_error',
+                message: 'Connection error. Please try again.'
+            };
+        }
+    }
+
+    /**
+     * Send a support request through the package endpoint. The server knows
+     * who the user is from the session, so no identity fields are sent.
+     * Responses: {status: created|rejected|throttled|failed, message, reference, view_url}
+     */
+    async escalate(message, attachments = [], errorContext = null) {
+        try {
+            const formData = new FormData();
+            formData.append('message', message || '');
+            if (errorContext) {
+                formData.append('error_context', errorContext);
+            }
+            formData.append('page_url', window.location.href);
+            const conversationId = this.getConversationId();
+            if (conversationId) {
+                formData.append('conversation_id', conversationId);
+            }
+
+            (Array.isArray(attachments) ? attachments : [attachments]).forEach(file => {
+                if (file) {
+                    formData.append('attachments[]', file, file.name);
+                }
+            });
+
+            const response = await fetch(this.endpoints.escalate, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': this.csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+
+            const text = await response.text();
+            let json;
+
+            try {
+                json = JSON.parse(text);
+            } catch (parseError) {
+                console.error('JSON Parse Error:', parseError, 'Raw:', text);
+                return {
+                    success: false,
+                    error: 'parse_error',
+                    message: 'Server returned an invalid response.'
+                };
+            }
+
+            this.rememberConversationId(json);
+
+            // 429 without a status field comes from the package rate limiter, not the host
+            if (response.status === 429 && !json.status) {
+                return {
+                    success: false,
+                    error: 'rate_limited',
+                    message: 'Too many requests. Please wait a minute and try again.'
+                };
+            }
+
+            return {
+                success: response.ok && json.status === 'created',
+                data: json,
+                message: json.message
+            };
+        } catch (error) {
+            console.error('Escalation Error:', error);
             return {
                 success: false,
                 error: 'network_error',

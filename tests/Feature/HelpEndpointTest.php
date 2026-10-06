@@ -12,8 +12,9 @@ use Subodh\SmartAiAssistant\Tests\TestCase;
 /**
  * Characterization tests for POST /smart-assistant/help.
  *
- * They pin the exact JSON and persistence behaviour of ErrorHelpController so the
- * resolver refactor (PLATFORM_PLAN.md steps 1-3) can prove it changes nothing.
+ * They pin the exact JSON and persistence behaviour of ErrorHelpController.
+ * Step 5 changed it on purpose: protocol 1 fields next to the legacy ones, one
+ * conversation per chat holding the guard state, status from the outcome.
  * Cases marked "KNOWN BUG" / "KNOWN GAP" record current behaviour on purpose.
  */
 class HelpEndpointTest extends TestCase
@@ -26,7 +27,11 @@ class HelpEndpointTest extends TestCase
 
     private const UNKNOWN_HI = "यह त्रुटि अभी दस्तावेज़ में नहीं है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें।";
 
+    private const ESCALATE_ACTION = ['type' => 'action', 'id' => 'escalate', 'label' => 'Raise ticket', 'confirm' => true];
+
     private string $sessionId;
+
+    private ?int $conversationId = null;
 
     protected function setUp(): void
     {
@@ -36,17 +41,45 @@ class HelpEndpointTest extends TestCase
     }
 
     /**
-     * Posts like the widget does: same-origin fetch, so the browser's session
-     * cookie is sent and the loop guard sees one continuous session.
+     * Posts like the widget does: same-origin fetch with the browser's session
+     * cookie, sending back the conversation id of the previous response.
      */
     private function ask(string $text, ?string $pageUrl = 'https://app.test/aeps?txn=1')
     {
-        return $this->withCredentials()
+        $response = $this->withCredentials()
             ->withCookie(config('session.cookie'), $this->sessionId)
             ->postJson('/smart-assistant/help', array_filter([
-            'error_text' => $text,
-            'page_url'   => $pageUrl,
+            'error_text'      => $text,
+            'page_url'        => $pageUrl,
+            'conversation_id' => $this->conversationId,
         ], fn ($v) => $v !== null));
+
+        $this->conversationId = $response->json('conversation_id') ?? $this->conversationId;
+
+        return $response;
+    }
+
+    /**
+     * The full response for a reply: protocol 1 fields plus the legacy ones.
+     */
+    private function reply(string $source, string $inputType, string $en, ?string $hi, array $extra = []): array
+    {
+        $blocks = [['type' => 'text', 'format' => 'basic', 'locale' => 'en', 'text' => $en]];
+        if ($hi !== null && $hi !== '') {
+            $blocks[] = ['type' => 'text', 'format' => 'basic', 'locale' => 'hi', 'text' => $hi];
+        }
+
+        return array_merge([
+            'protocol'        => 1,
+            'conversation_id' => $this->conversationId,
+            'blocks'          => $blocks,
+            'actions'         => [],
+            'meta'            => ['source' => $source, 'input_type' => $inputType, 'category' => null],
+            'source'          => $source,
+            'answer_en'       => $en,
+            'answer_hi'       => $hi,
+            'input_type'      => $inputType,
+        ], $extra);
     }
 
     private function seedDefinition(array $attributes = []): ErrorDefinition
@@ -59,9 +92,16 @@ class HelpEndpointTest extends TestCase
         ], $attributes));
     }
 
-    private function assertNothingPersisted(): void
+    /**
+     * Canned replies keep the conversation open but store none of the text.
+     */
+    private function assertNoTextStored(): void
     {
-        $this->assertSame(0, Conversation::count(), 'conversations persisted');
+        $conversation = Conversation::sole();
+        $this->assertSame('open', $conversation->status);
+        $keys = array_keys($conversation->meta ?? []);
+        sort($keys);
+        $this->assertSame(['guest_key', 'state'], $keys, 'conversation meta holds only the guest key and guard state');
         $this->assertSame(0, Message::count(), 'messages persisted');
     }
 
@@ -102,22 +142,17 @@ class HelpEndpointTest extends TestCase
     }
 
     // ---------------------------------------------------------------------
-    // Non-processable input: canned reply, nothing persisted
+    // Non-processable input: canned reply, no text stored
     // ---------------------------------------------------------------------
 
-    public function test_greeting_gets_canned_reply_and_is_not_persisted(): void
+    public function test_greeting_gets_canned_reply_and_its_text_is_not_stored(): void
     {
-        $this->ask('hello')
-            ->assertOk()
-            ->assertExactJson([
-                'conversation_id' => null,
-                'source'          => 'greeting',
-                'answer_en'       => 'Hello. Please state the issue you are facing.',
-                'answer_hi'       => null,
-                'input_type'      => 'greeting',
-            ]);
+        $response = $this->ask('hello')->assertOk();
 
-        $this->assertNothingPersisted();
+        $response->assertExactJson($this->reply('greeting', 'greeting', 'Hello. Please state the issue you are facing.', null));
+        $this->assertSame(Conversation::sole()->id, $response->json('conversation_id'));
+
+        $this->assertNoTextStored();
     }
 
     public function test_noise_vague_and_severe_abuse_get_canned_replies(): void
@@ -135,7 +170,7 @@ class HelpEndpointTest extends TestCase
             'answer_en' => 'Support is available for technical issues. Please keep the conversation respectful.',
         ]);
 
-        $this->assertNothingPersisted();
+        $this->assertNoTextStored();
     }
 
     public function test_hindi_only_input_is_processed_and_persisted(): void
@@ -160,13 +195,7 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('hello')
             ->assertOk()
-            ->assertExactJson([
-                'conversation_id' => null,
-                'source'          => 'exit',
-                'answer_en'       => self::EXIT_MESSAGE,
-                'answer_hi'       => null,
-                'input_type'      => 'loop_exit',
-            ]);
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null));
 
         // The canned-reply guard is not cleared on exit, so it keeps exiting.
         $this->ask('hello')->assertJson(['source' => 'exit']);
@@ -174,8 +203,8 @@ class HelpEndpointTest extends TestCase
 
     public function test_known_gap_canned_reply_guard_survives_intervening_valid_messages(): void
     {
-        // The guard lives in the session (not per conversation) and only another
-        // canned reply overwrites it, so a greeting much later in the session exits.
+        // Only another canned reply overwrites the guard's memory, so a greeting
+        // much later in the conversation exits.
         $this->ask('hello')->assertJson(['source' => 'greeting']);
         $this->ask('money deducted but transaction failed')->assertJson(['source' => 'unknown']);
 
@@ -193,19 +222,20 @@ class HelpEndpointTest extends TestCase
     // Escalation request
     // ---------------------------------------------------------------------
 
-    public function test_escalation_request_points_to_raise_ticket_and_is_not_persisted(): void
+    public function test_escalation_request_points_to_raise_ticket_and_its_text_is_not_stored(): void
     {
         $this->ask('I want to talk to a human')
             ->assertOk()
-            ->assertExactJson([
-                'conversation_id' => null,
-                'source'          => 'escalation',
-                'answer_en'       => "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance.",
-                'answer_hi'       => "आपका अनुरोध दर्ज किया गया है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें या तुरंत सहायता के लिए हमारी हेल्पलाइन पर कॉल करें।",
-                'input_type'      => 'escalation_request',
-            ]);
+            ->assertExactJson($this->reply(
+                'escalation',
+                'escalation_request',
+                "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance.",
+                "आपका अनुरोध दर्ज किया गया है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें या तुरंत सहायता के लिए हमारी हेल्पलाइन पर कॉल करें।",
+                ['actions' => [self::ESCALATE_ACTION]],
+            ));
 
-        $this->assertNothingPersisted();
+        $this->assertSame('open', Conversation::sole()->status);
+        $this->assertSame(0, Message::count());
     }
 
     public function test_escalation_request_wins_over_a_knowledge_base_match(): void
@@ -230,33 +260,33 @@ class HelpEndpointTest extends TestCase
         $conversation = Conversation::sole();
         $expectedEn = "I understand you are facing a **AEPS** issue.\n\nClean the scanner and retry the capture.";
 
-        $response->assertExactJson([
-            'conversation_id' => $conversation->id,
-            'source'          => 'kb',
-            'answer_en'       => $expectedEn,
-            'answer_hi'       => 'स्कैनर साफ करें और फिर से प्रयास करें।',
-            'input_type'      => 'valid',
-            'category'        => 'AEPS',
-        ]);
+        $this->assertSame($conversation->id, $this->conversationId);
+        $response->assertExactJson($this->reply('kb', 'valid', $expectedEn, 'स्कैनर साफ करें और फिर से प्रयास करें।', [
+            'meta'     => ['source' => 'kb', 'input_type' => 'valid', 'category' => 'AEPS'],
+            'category' => 'AEPS',
+        ]));
 
         $this->assertNull($conversation->user_id);
         $this->assertSame('AEPS', $conversation->service);
         $this->assertSame('resolved', $conversation->status);
         // Only the path is stored; the query string (?txn=1) is dropped.
         $this->assertSame('/aeps', $conversation->page_url);
-        // assertEquals for JSON columns: MySQL does not preserve object key order.
-        $this->assertEquals([
-            'raw_error_text' => 'Biometric capture timeout, please retry',
-            'input_type'     => 'valid',
-            'category'       => 'AEPS',
-        ], $conversation->meta);
+        // Guests are recognised by a hash of their session id, never the id itself
+        $this->assertSame(hash('sha256', $this->sessionId), $conversation->meta['guest_key']);
+        $this->assertSame('AEPS', $conversation->meta['category']);
 
         $messages = $conversation->messages()->orderBy('id')->get();
         $this->assertCount(2, $messages);
 
         $this->assertSame('user', $messages[0]->sender_type);
         $this->assertSame('Biometric capture timeout, please retry', $messages[0]->message);
-        $this->assertEquals(['input_type' => 'valid', 'category' => 'AEPS'], $messages[0]->data);
+        // assertEquals for JSON columns: MySQL does not preserve object key order.
+        $this->assertEquals([
+            'source'     => 'page_error',
+            'input_type' => 'valid',
+            'category'   => 'AEPS',
+            'page_url'   => '/aeps',
+        ], $messages[0]->data);
 
         $this->assertSame('ai', $messages[1]->sender_type);
         $this->assertSame($expectedEn . "\nस्कैनर साफ करें और फिर से प्रयास करें।", $messages[1]->message);
@@ -347,9 +377,10 @@ class HelpEndpointTest extends TestCase
             ->assertJson(['source' => 'kb']);
 
         $conversation = Conversation::sole();
-        $this->assertSame('capture timeout for [phone], pan [pan]', $conversation->meta['raw_error_text']);
         $this->assertSame('/txn/[number]', $conversation->page_url);
-        $this->assertSame('capture timeout for [phone], pan [pan]', Message::where('sender_type', 'user')->sole()->message);
+        $message = Message::where('sender_type', 'user')->sole();
+        $this->assertSame('capture timeout for [phone], pan [pan]', $message->message);
+        $this->assertSame('/txn/[number]', $message->data['page_url']);
     }
 
     public function test_the_redactor_is_replaceable_through_config(): void
@@ -376,17 +407,14 @@ class HelpEndpointTest extends TestCase
     {
         $response = $this->ask('aeps withdrawal failed')->assertOk();
 
-        $response->assertExactJson([
-            'conversation_id' => Conversation::sole()->id,
-            'source'          => 'unknown',
-            'answer_en'       => 'I understand you are facing a **AEPS** issue, but ' . self::UNKNOWN_EN,
-            'answer_hi'       => self::UNKNOWN_HI,
-            'input_type'      => 'valid',
-            'category'        => 'AEPS',
-        ]);
+        $response->assertExactJson($this->reply('unknown', 'valid', 'I understand you are facing a **AEPS** issue, but ' . self::UNKNOWN_EN, self::UNKNOWN_HI, [
+            'actions'  => [self::ESCALATE_ACTION],
+            'meta'     => ['source' => 'unknown', 'input_type' => 'valid', 'category' => 'AEPS'],
+            'category' => 'AEPS',
+        ]));
 
-        // KNOWN GAP: unanswered conversations are still marked "resolved".
-        $this->assertSame('resolved', Conversation::sole()->status);
+        // Unanswered conversations are marked as such (was a known gap: "resolved")
+        $this->assertSame('unresolved', Conversation::sole()->status);
         $this->assertSame(2, Message::count());
         $this->assertNull(Message::where('sender_type', 'ai')->sole()->data['matched_error_id']);
     }
@@ -413,18 +441,13 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('capture timeout')
             ->assertOk()
-            ->assertExactJson([
-                'conversation_id' => null,
-                'source'          => 'exit',
-                'answer_en'       => self::EXIT_MESSAGE,
-                'answer_hi'       => null,
-                'input_type'      => 'loop_exit',
-            ]);
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null));
 
         // The hash is forgotten on exit, so the third identical request is answered again.
         $this->ask('capture timeout')->assertJson(['source' => 'kb']);
 
-        $this->assertSame(2, Conversation::count(), 'exit responses are not persisted');
+        $this->assertSame(1, Conversation::count());
+        $this->assertSame(4, Message::count(), 'exit responses are not stored');
     }
 
     public function test_loop_guard_compares_answers_not_inputs(): void

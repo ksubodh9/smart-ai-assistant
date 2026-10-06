@@ -135,6 +135,17 @@ domain `general`). Publish the config once
 5. `responses`: reply texts to change, per key, optionally with `hi`.
 6. `resolution.strategies`: add your own `ResolutionStrategy` classes; keep
    `FallbackStrategy` last.
+7. `escalation.channel`: your `EscalationChannel` class that turns a support
+   request into a ticket in your system (the default rejects every request).
+   Set `escalation.attachments` and `escalation.max_message_length` within
+   your system's limits.
+8. `features.server_escalation` (or `SMART_AI_SERVER_ESCALATION=true`): send
+   typed messages through the package endpoint and your channel. While it is
+   off, the widget posts to `/customer-support/raise/ticket` with identity
+   fields rendered into the page.
+9. `conversations.retention_days` (or `SMART_AI_RETENTION_DAYS`): how long
+   to keep stored conversations, then schedule `php artisan smart-ai:prune`
+   daily. `null` keeps everything.
 
 The config is merged one level deep: a top-level key in your file replaces the
 package's value for that key entirely.
@@ -163,20 +174,59 @@ POST /smart-assistant/help
 ```json
 {
     "error_text": "Error message",
-    "page_url": "https://example.com"
+    "page_url": "https://example.com",
+    "conversation_id": 12
 }
 ```
 
-**Response:**
+`conversation_id` is the one from the previous response; it is only honoured
+for the same user (or guest session) and while the conversation is active.
+
+**Response** (protocol 1, with the legacy fields kept for one release):
 ```json
 {
+    "protocol": 1,
+    "conversation_id": 12,
+    "blocks": [
+        { "type": "text", "format": "basic", "locale": "en", "text": "English solution" },
+        { "type": "text", "format": "basic", "locale": "hi", "text": "Hindi solution" }
+    ],
+    "actions": [],
+    "meta": { "source": "kb", "input_type": "valid", "category": "AEPS" },
+    "source": "kb",
     "answer_en": "English solution",
     "answer_hi": "Hindi solution",
-    "source": "known"
+    "input_type": "valid",
+    "category": "AEPS"
 }
 ```
 
-### Chat Message
+After an unresolved reply or a request for a human, `actions` holds
+`{"type": "action", "id": "escalate", "label": "Raise ticket", "confirm": true}`.
+
+### Support Request (`features.server_escalation` on)
+```
+POST /smart-assistant/escalate
+```
+
+**Multipart form:** `message` (required unless files are attached),
+`error_context` (page error the user picked, optional), `page_url` (optional),
+`attachments[]` (files, limited by `escalation.attachments`). The user comes
+from the session; identity fields in the form are ignored.
+
+**Response** (`201` created, `422` rejected, `429` throttled by the host,
+`503` failed; `401` for guests):
+```json
+{
+    "conversation_id": 12,
+    "status": "created",
+    "message": "Your query has been registered successfully.",
+    "reference": "MDXCID123456789",
+    "view_url": "/customer-support/ticket/MDXCID123456789"
+}
+```
+
+### Chat Message (`features.server_escalation` off)
 ```
 POST /customer-support/raise/ticket
 ```
@@ -231,6 +281,13 @@ packages/smart-ai-assistant/
 - [ ] Fullscreen preview opens
 - [ ] Send button works
 - [ ] API responses display
+- [ ] With `server_escalation` on: a typed message creates a ticket and shows
+      its reference; a second one within the host's limit shows the host's
+      "please wait" message; a `.docx` or a file over the size limit is refused
+      with a message; the page source has no `sa-user-*` inputs
+- [ ] Replies look as before (💡 Solution / 🇮🇳 हिंदी में sections); the same
+      greeting twice, or the same error twice, gets the exit message, also
+      after navigating to another page in the same tab
 - [ ] Mobile responsive works
 - [ ] No console errors
 

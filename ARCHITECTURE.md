@@ -312,6 +312,8 @@ differs between hosts is configuration.
 ```
 validate (max 1000 chars, page path only)
   → UserContextResolver        who is the user (host decides)
+  → ConversationStore::open    continue the sent conversation_id if it is the caller's
+                               and not idle; otherwise start a new one
   → Interpreter                text → StructuredProblem (intent, domains, signals)
   → ResolverPipeline
        strategies, in config order, first non-null wins:
@@ -322,8 +324,10 @@ validate (max 1000 chars, page path only)
        guards, applied to the winner:
          ClarifyOnceGuard            same canned reply twice → exit
          LoopGuard                   same answer twice → exit
-  → EloquentConversationStore  only if Resolution::persist; user text redacted
-  → ResponseSerializer         {conversation_id, source, answer_en, answer_hi, input_type, category?}
+  → ConversationStore::record  only if Resolution::persist; user text redacted;
+                               status resolved / unresolved
+  → ResponseSerializer         protocol 1: {protocol, conversation_id, blocks, actions, meta}
+                               + legacy {source, answer_en, answer_hi, input_type, category?}
 ```
 
 | Piece | Where | Replace via |
@@ -337,9 +341,54 @@ validate (max 1000 chars, page path only)
 | Reply texts | `Support\ResponseCatalog::DEFAULTS` | `responses` (per key) |
 | Identity | `Support\LaravelAuthUserContextResolver` | `user_resolver` |
 | Redaction | `Support\DefaultRedactor` | `redactor` |
+| Conversations | `Persistence\EloquentConversationStore` | `conversations.idle_minutes`, `conversations.retention_days` |
 
-Guard state (last reply sent) lives in the session through the
-`ConversationState` contract; it moves to the conversation in plan step 5.
+**Conversations.** One chat is one row in `smart_ai_conversations`. The
+widget keeps the id it gets back in `sessionStorage` and sends it with the next
+message (and with a support request). The id is only a hint: it is honoured for
+the same user id, or for guests the same session (a sha256 of the session id in
+`meta.guest_key`), and only within `idle_minutes`. Otherwise a new conversation
+starts, so a guessed id never reaches someone else's conversation.
+
+Guard state (last reply sent) lives in the conversation's `meta.state` through
+the `ConversationState` contract. Canned replies store no text; KB answers and
+fallbacks add a user and an AI message. Status: `open` → `resolved` /
+`unresolved` (latest stored outcome) → `escalated` once a ticket is created
+(final). `php artisan smart-ai:prune` deletes conversations idle longer than
+`retention_days`; hosts schedule it.
+
+**Wire format (protocol 1).** `blocks` are `text` blocks, one per answer
+locale, with `format: "basic"` (`**bold**` and line breaks; rendered as text).
+`actions` offers `escalate` after unresolved replies and requests for a human;
+the widget does not render actions yet (plan step 6). The legacy fields stay
+for one release; `SmartAssistant.renderResponse()` prefers blocks.
+
+### Escalation: `POST /smart-assistant/escalate`
+
+Used by the widget for typed messages when `features.server_escalation` is on.
+`EscalationController` follows the same shape as `/help`:
+
+```
+UserContextResolver            guests get 401; identity fields in the form are ignored
+  → validate                   message or attachments; limits from config('escalation')
+  → Interpreter                only for domain tags (e.g. AEPS), passed to the channel
+  → ConversationStore::open    same rule as /help
+  → EscalationChannel          host system decides: created / rejected / throttled / failed
+  → recordEscalation           user message (redacted) + system message with the outcome;
+                               "created" marks the conversation escalated
+  → JSON                       {conversation_id, status, message, reference, view_url}; 201 / 422 / 429 / 503
+```
+
+| Piece | Where | Replace via |
+|---|---|---|
+| `EscalationChannel` contract, `EscalationRequest` / `EscalationResult` | `src/Core` | — |
+| `NullEscalationChannel` (default, rejects), `LogEscalationChannel` (dev) | `src/Escalation` | `escalation.channel` |
+
+The widget learns the endpoint and the flag from a `<script type="application/json"
+id="sa-config">` block in the view. With the flag on, the view renders no
+`sa-user-*` inputs. MaddoxPay's channel (`App\SmartAssistant\MaddoxPayTicketChannel`)
+uses the host's `TicketService`, which `QueryController::raiseTicket` also uses,
+so both share the 10-minute limit and ticket creation.
 
 ## 🔐 Security Considerations
 
