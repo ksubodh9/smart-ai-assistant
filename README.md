@@ -102,23 +102,38 @@ That's it! The assistant will appear as a floating button in the bottom-right co
 
 ## 🎨 Customization
 
-### Change Colors
+### Branding, page scan and widget features
 
-Edit `public/css/assistant.css`:
+Everything is set in `config/smart-ai-assistant.php` under `widget`; do not
+publish or edit the view. Each section replaces only the keys you list:
 
-```css
-#smart-assistant-toggle {
-    background: linear-gradient(135deg, #YOUR_COLOR_1 0%, #YOUR_COLOR_2 100%);
-}
+```php
+'widget' => [
+    'branding' => [
+        'title'            => 'Help desk',
+        'welcome_title'    => "Hello! I'm Asha",
+        'welcome_subtitle' => 'How may I assist you today?',
+        'footer'           => 'Powered by Example',   // null hides it
+        'primary_color'    => '#0a7d5a',              // hex only
+        'secondary_color'  => '#095c45',
+    ],
+    'features' => [
+        'page_scan' => true, 'attachments' => true, 'screenshot' => true,
+        'bootstrap_modal_compat' => false,  // Bootstrap modals steal the chat input's focus
+    ],
+    'suggestions' => ['Money deducted but transaction failed'],  // needs resolve_typed_messages
+    'page_scan' => [
+        'ids'             => ['payment-error'],       // always errors
+        'selectors'       => ['.alert-danger'],        // always errors
+        'soft_selectors'  => ['.text-danger'],         // errors unless an ignore rule applies
+        'ignore_classes'  => ['invalid-feedback'],
+        'ignore_ids'      => ['status'],
+        'ignore_patterns' => ['^(loading\.*|please\s+wait)$'],  // JS regex, case-insensitive
+    ],
+],
 ```
 
-### Change Assistant Name
-
-Edit `resources/views/components/widget.blade.php`:
-
-```html
-<div class="sa-welcome-title">Hello! I'm YOUR_NAME</div>
-```
+Pages can also mark an element the scan must skip with `data-sa-ignore`.
 
 ### Host configuration checklist
 
@@ -146,24 +161,35 @@ domain `general`). Publish the config once
 9. `conversations.retention_days` (or `SMART_AI_RETENTION_DAYS`): how long
    to keep stored conversations, then schedule `php artisan smart-ai:prune`
    daily. `null` keeps everything.
+10. `features.resolve_typed_messages` (or `SMART_AI_RESOLVE_TYPED_MESSAGES=true`):
+    typed messages go to the assistant first, and a ticket is created only
+    after the user presses "Raise ticket" and confirms. While it is off, every
+    typed message that passes the widget's own checks becomes a ticket.
+11. `widget`: branding, page scan rules and widget features (see above).
+12. `data_tools`, `understanding.entities` and `capabilities.data_tools` (or
+    `SMART_AI_DATA_TOOLS=true`): answers from your own data, e.g. a
+    transaction's status when the message contains its reference. Implement
+    `Subodh\SmartAiAssistant\Core\Contracts\DataTool`; `authorize()` must
+    check that the user may see the record, and `execute()` must return masked,
+    display-safe values only. List the whole `capabilities` array, since
+    top-level keys replace the package default.
 
 The config is merged one level deep: a top-level key in your file replaces the
-package's value for that key entirely.
-
-### Add Error Selectors
-
-Edit `public/js/assistant.js`:
-
-```javascript
-const errorSelectors = [
-    '.alert-danger',
-    '.your-custom-selector'
-];
-```
+package's value for that key entirely. The exception is `widget`, whose
+sections keep their defaults for keys you leave out.
 
 ---
 
 ## 🔧 API Endpoints
+
+### Message (`features.resolve_typed_messages` on)
+```
+POST /smart-assistant/message
+```
+
+**Request:** `{"text": "...", "source": "typed", "page_url": "...", "conversation_id": 12}`.
+`source` is `typed` (default), `page_error` or `suggestion`. The response is
+the same as for the error query below. It never creates a ticket.
 
 ### Error Query
 ```
@@ -288,6 +314,23 @@ packages/smart-ai-assistant/
 - [ ] Replies look as before (💡 Solution / 🇮🇳 हिंदी में sections); the same
       greeting twice, or the same error twice, gets the exit message, also
       after navigating to another page in the same tab
+- [ ] With `resolve_typed_messages` on: a typed greeting gets a reply and no
+      ticket; an unknown problem gets the reply plus a "Raise ticket" button;
+      the button shows what will be sent; "Cancel" sends nothing; "Send to
+      support" creates one ticket and shows its reference; typing "talk to an
+      agent" offers the button; a screenshot sent without text offers the
+      button; an older "Raise ticket" button is disabled after a new message
+- [ ] Branding from `widget.branding` (title, welcome texts, footer, colours)
+      with no customised view in `resources/views/vendor/smart-ai-assistant`
+- [ ] Error tags appear for the same page errors as before (AEPS modal
+      errors, `.alert-danger`), not for "Loading...", form validation or labels
+- [ ] With a Bootstrap modal open, the chat input can be clicked and typed in
+      (`bootstrap_modal_compat`)
+- [ ] With `data_tools` on: "status of <your reference>" shows a Transaction
+      card (reference, service, type, amount, status, date); a reference of a
+      user outside your downline, and a made-up reference, both get "I couldn't
+      find that reference in your account" with a "Raise ticket" button; the
+      log has one "Smart assistant data tool" line per lookup
 - [ ] Mobile responsive works
 - [ ] No console errors
 

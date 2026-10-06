@@ -3,6 +3,7 @@
 namespace Subodh\SmartAiAssistant\Tests\Feature;
 
 use Cartalyst\Sentinel\Laravel\Facades\Sentinel;
+use Subodh\SmartAiAssistant\Support\WidgetConfig;
 use Subodh\SmartAiAssistant\Tests\TestCase;
 
 /**
@@ -72,18 +73,115 @@ class WidgetComponentTest extends TestCase
             ->assertDontSee('9999999999', false);
     }
 
-    public function test_widget_config_block_carries_endpoints_and_features(): void
+    /**
+     * The JSON the widget scripts read from the page.
+     */
+    private function scriptConfig(): array
     {
-        config(['smart-ai-assistant.features.server_escalation' => true]);
-
         $html = (string) $this->blade('<x-smart-assistant-widget />');
 
         $this->assertMatchesRegularExpression('#<script type="application/json" id="sa-config">(.*?)</script>#s', $html);
         preg_match('#<script type="application/json" id="sa-config">(.*?)</script>#s', $html, $match);
+
+        return json_decode($match[1], true);
+    }
+
+    public function test_widget_config_block_carries_endpoints_and_features(): void
+    {
+        config(['smart-ai-assistant.features.server_escalation' => true]);
+
+        $config = $this->scriptConfig();
+
         $this->assertSame([
-            'endpoints' => ['help' => '/smart-assistant/help', 'escalate' => '/smart-assistant/escalate'],
-            'features'  => ['server_escalation' => true],
-        ], json_decode($match[1], true));
+            'help'     => '/smart-assistant/help',
+            'message'  => '/smart-assistant/message',
+            'escalate' => '/smart-assistant/escalate',
+        ], $config['endpoints']);
+        $this->assertSame(['server_escalation' => true, 'resolve_typed_messages' => false], $config['features']);
+        $this->assertSame(WidgetConfig::DEFAULTS['features'], $config['widget']['features']);
+        $this->assertSame(WidgetConfig::DEFAULTS['page_scan'], $config['widget']['page_scan']);
+    }
+
+    public function test_default_branding_is_generic(): void
+    {
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertSee('Support assistant')
+            ->assertSee('Hello!')
+            ->assertSee('How may I assist you today?')
+            ->assertDontSee('class="sa-footer"', false)
+            ->assertSee('--sa-primary: #667eea;', false)
+            ->assertSee('--sa-primary-rgb: 102, 126, 234;', false);
+    }
+
+    public function test_branding_comes_from_config_and_is_escaped(): void
+    {
+        config(['smart-ai-assistant.widget' => ['branding' => [
+            'title'           => 'Help <b>desk</b>',
+            'welcome_title'   => "Hello! I'm Asha",
+            'footer'          => 'Powered by Example',
+            'primary_color'   => '#0a0',
+            'secondary_color' => 'red; } body { display:none',
+        ]]]);
+
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertSee('Help &lt;b&gt;desk&lt;/b&gt;', false)
+            ->assertSee("Hello! I'm Asha")
+            ->assertSee('Powered by Example')
+            ->assertSee('--sa-primary: #0a0;', false)
+            ->assertSee('--sa-primary-rgb: 0, 170, 0;', false)
+            // Not a hex colour: the default is used instead
+            ->assertSee('--sa-secondary: #764ba2;', false)
+            ->assertDontSee('display:none', false)
+            // Keys not set keep their defaults
+            ->assertSee('How may I assist you today?');
+    }
+
+    public function test_host_page_scan_rules_replace_only_the_keys_given(): void
+    {
+        config(['smart-ai-assistant.widget' => ['page_scan' => ['ids' => ['modal_error']]]]);
+
+        $scan = $this->scriptConfig()['widget']['page_scan'];
+
+        $this->assertSame(['modal_error'], $scan['ids']);
+        $this->assertSame(['.alert-danger', '.smart-error'], $scan['selectors']);
+    }
+
+    public function test_features_hide_parts_of_the_widget(): void
+    {
+        config(['smart-ai-assistant.widget' => ['features' => ['attachments' => false, 'screenshot' => false]]]);
+
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertDontSee('id="sa-attach-btn"', false)
+            ->assertDontSee('id="sa-file-upload"', false)
+            ->assertDontSee('id="sa-screenshot-btn"', false)
+            ->assertDontSee('html2canvas.min.js', false);
+    }
+
+    public function test_bootstrap_compat_script_is_only_loaded_when_enabled(): void
+    {
+        $this->blade('<x-smart-assistant-widget />')->assertDontSee('host-compat.js', false);
+
+        config(['smart-ai-assistant.widget' => ['features' => ['bootstrap_modal_compat' => true]]]);
+
+        $this->blade('<x-smart-assistant-widget />')->assertSeeInOrder([
+            'js/ui-manager.js',
+            'js/host-compat.js',
+            'js/assistant.js',
+        ], false);
+    }
+
+    public function test_suggestions_need_typed_message_resolution(): void
+    {
+        config(['smart-ai-assistant.widget' => ['suggestions' => ['Money deducted', '<script>x</script>']]]);
+
+        $this->blade('<x-smart-assistant-widget />')->assertDontSee('sa-suggestion', false);
+
+        config(['smart-ai-assistant.features.resolve_typed_messages' => true]);
+
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertSee('data-send="Money deducted"', false)
+            ->assertSee('&lt;script&gt;x&lt;/script&gt;', false)
+            ->assertDontSee('<script>x</script>', false);
     }
 
     public function test_file_input_accepts_the_configured_attachment_types(): void

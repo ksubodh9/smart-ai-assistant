@@ -19,8 +19,12 @@ class ResponseSerializer
 {
     public const PROTOCOL = 1;
 
-    /** Outcomes after which the widget may offer to raise a ticket */
-    private const ESCALATE_AFTER = [Resolution::UNRESOLVED, Resolution::ESCALATE];
+    /**
+     * Outcomes after which the widget may offer to raise a ticket: nothing
+     * answered, the user asked for a human, or the assistant gave up (an exit
+     * must always leave a way to reach support).
+     */
+    private const ESCALATE_AFTER = [Resolution::UNRESOLVED, Resolution::ESCALATE, Resolution::EXIT];
 
     public function __construct(private readonly ResponseCatalog $responses)
     {
@@ -62,6 +66,10 @@ class ResponseSerializer
      */
     private function blocks(Resolution $resolution): array
     {
+        if ($resolution->blocks !== []) {
+            return $resolution->blocks;
+        }
+
         $blocks = [];
 
         foreach ($resolution->answers as $locale => $text) {

@@ -1,11 +1,37 @@
 /**
  * UI Manager - Handles all UI interactions and rendering
- * 
- * Error Scanning:
- * - Ignores .invalid-feedback (form validation messages)
- * - Shows all other error messages (alert-danger, text-danger, modal errors)
+ *
+ * Error scanning follows widget.page_scan from the view's config block:
+ * ids and selectors always count as errors; soft selectors only after the
+ * ignore rules (form validation, placeholders, labels).
  */
+
+// Widget settings rendered by the view (<script type="application/json" id="sa-config">)
+window.SmartAssistantConfig = window.SmartAssistantConfig || (() => {
+    try {
+        return JSON.parse(document.getElementById('sa-config')?.textContent || '{}');
+    } catch (e) {
+        console.error('Smart Assistant: invalid sa-config block', e);
+        return {};
+    }
+})();
+
+// Where this script was loaded from, to find host-compat.js next to it
+const SA_SCRIPT_BASE = (
+    document.currentScript?.src
+    || document.querySelector('script[src*="smart-ai-assistant/js/ui-manager.js"]')?.src
+    || ''
+).replace(/[^/]*$/, '');
+
 class UIManager {
+    static loadHostCompat() {
+        if (!SA_SCRIPT_BASE || document.querySelector('script[data-sa-host-compat]')) return;
+        const script = document.createElement('script');
+        script.src = SA_SCRIPT_BASE + 'host-compat.js';
+        script.dataset.saHostCompat = '';
+        document.head.appendChild(script);
+    }
+
     constructor() {
         this.panel = document.getElementById('smart-assistant-panel');
         this.toggleBtn = document.getElementById('smart-assistant-toggle');
@@ -25,11 +51,26 @@ class UIManager {
         // Flag to keep input enabled at all times after first interaction
         this.keepInputActive = false;
 
-        // Setup input protection observer
-        this.setupInputProtection();
+        // Widget settings from the view; null when an older published view rendered the page
+        const widgetConfig = window.SmartAssistantConfig?.widget || null;
+        this.features = Object.assign(
+            { page_scan: true, bootstrap_modal_compat: true },
+            widgetConfig?.features || {}
+        );
+        this.pageScan = widgetConfig?.page_scan || UIManager.LEGACY_PAGE_SCAN;
+
+        // Optional workarounds for Bootstrap modals and input-disabling pages
+        if (window.SmartAssistantHostCompat) {
+            window.SmartAssistantHostCompat.install(this);
+        } else if (!widgetConfig) {
+            // Older published views always had the workarounds; keep them
+            UIManager.loadHostCompat();
+        }
 
         // Setup proactive error monitoring
-        this.setupErrorMonitoring();
+        if (this.features.page_scan) {
+            this.setupErrorMonitoring();
+        }
 
         this.initEventListeners();
 
@@ -68,295 +109,6 @@ class UIManager {
         }
     }
 
-    /**
-     * Setup MutationObserver to protect chat input from being disabled
-     * This ensures the input always stays enabled after user interaction
-     */
-    setupInputProtection() {
-        const chatInput = document.getElementById('smart-assistant-chat-input');
-        const sendBtn = document.getElementById('sa-send-btn');
-
-        if (chatInput) {
-            // Observer for chat input
-            const inputObserver = new MutationObserver((mutations) => {
-                if (this.keepInputActive) {
-                    mutations.forEach(mutation => {
-                        if (mutation.type === 'attributes') {
-                            if (mutation.attributeName === 'disabled' ||
-                                mutation.attributeName === 'readonly') {
-                                // Re-enable immediately if disabled
-                                if (chatInput.disabled || chatInput.readOnly) {
-                                    this.forceEnableInput();
-                                }
-                            }
-                        }
-                    });
-                }
-            });
-
-            inputObserver.observe(chatInput, {
-                attributes: true,
-                attributeFilter: ['disabled', 'readonly']
-            });
-        }
-
-        if (sendBtn) {
-            // Observer for send button
-            const btnObserver = new MutationObserver((mutations) => {
-                if (this.keepInputActive) {
-                    mutations.forEach(mutation => {
-                        if (mutation.type === 'attributes' &&
-                            mutation.attributeName === 'disabled') {
-                            if (sendBtn.disabled) {
-                                sendBtn.disabled = false;
-                                sendBtn.removeAttribute('disabled');
-                            }
-                        }
-                    });
-                }
-            });
-
-            btnObserver.observe(sendBtn, {
-                attributes: true,
-                attributeFilter: ['disabled']
-            });
-        }
-
-        // Also set up an interval to periodically check and re-enable
-        setInterval(() => {
-            if (this.keepInputActive && this.panel?.classList.contains('sa-panel-open')) {
-                this.forceEnableInput();
-            }
-        }, 1000);
-
-        // Handle Bootstrap modal focus trap
-        // Bootstrap modals trap focus inside them, preventing interaction with elements outside
-        // We need to bypass this for our assistant widget
-        this.setupModalFocusBypass();
-    }
-
-    /**
-     * Bypass Bootstrap modal focus trapping for the assistant widget
-     * This allows the chat input to receive focus even when a modal is open
-     */
-    setupModalFocusBypass() {
-        const widget = document.getElementById('smart-assistant-widget');
-        const chatInput = document.getElementById('smart-assistant-chat-input');
-        if (!widget) return;
-
-        // Stop Bootstrap from intercepting focus events on our widget
-        widget.addEventListener('focusin', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        }, true);
-
-        widget.addEventListener('focus', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        }, true);
-
-        // Handle click events - ensure they work inside our widget when modal is open
-        widget.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            // If clicking on the input, directly focus it
-            if (e.target.id === 'smart-assistant-chat-input' ||
-                e.target.closest('#smart-assistant-chat-input')) {
-                setTimeout(() => {
-                    const input = document.getElementById('smart-assistant-chat-input');
-                    if (input) {
-                        input.focus();
-                        this.forceEnableInput();
-                    }
-                }, 0);
-            }
-        }, true);
-
-        // Prevent Bootstrap's focusout handler from taking focus away
-        widget.addEventListener('focusout', (e) => {
-            if (this.panel?.classList.contains('sa-panel-open')) {
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-            }
-        }, true);
-
-        // SPECIFIC TEXTAREA HANDLING
-        // Textareas need special handling because they require establishing a text cursor
-        if (chatInput) {
-            // Prevent all focus-related events from bubbling on the textarea
-            ['focus', 'focusin', 'click', 'mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(eventType => {
-                chatInput.addEventListener(eventType, (e) => {
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                }, true);
-            });
-
-            // Aggressive mousedown handler to prevent focus stealing
-            chatInput.addEventListener('mousedown', (e) => {
-                e.stopPropagation();
-                // We don't preventDefault here because we want the text cursor to be placed normally
-                // But we aggressively ensure focus is ours
-
-                setTimeout(() => {
-                    this.forceEnableInput();
-                    chatInput.focus();
-                }, 0);
-                setTimeout(() => chatInput.focus(), 50);
-            }, true);
-
-            // When clicking the textarea, aggressively maintain focus
-            chatInput.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-
-                // Force focus back after any potential Bootstrap interference
-                setTimeout(() => chatInput.focus(), 0);
-            });
-
-            // When textarea receives focus, prevent Bootstrap from stealing it
-            chatInput.addEventListener('focus', (e) => {
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-
-                // Add a temporary listener to block any blur attempts
-                const preventBlur = (blurEvent) => {
-                    // Check if blur is going to somewhere outside our widget
-                    const relatedTarget = blurEvent.relatedTarget;
-                    const widget = document.getElementById('smart-assistant-widget');
-
-                    // If focus is leaving to a modal element, prevent it
-                    if (!relatedTarget ||
-                        (relatedTarget && relatedTarget.closest('.modal') &&
-                            widget && !widget.contains(relatedTarget))) {
-                        blurEvent.preventDefault();
-                        blurEvent.stopImmediatePropagation();
-                        setTimeout(() => chatInput.focus(), 0);
-                    }
-                };
-
-                chatInput.addEventListener('blur', preventBlur, { once: true, capture: true });
-
-                // Remove this listener after a short delay to prevent memory issues
-                setTimeout(() => {
-                    chatInput.removeEventListener('blur', preventBlur, { capture: true });
-                }, 100);
-            });
-
-            // Add keyboard event handling so typing works
-            chatInput.addEventListener('keydown', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            chatInput.addEventListener('keyup', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            chatInput.addEventListener('keypress', (e) => {
-                e.stopPropagation();
-            }, true);
-
-            chatInput.addEventListener('input', (e) => {
-                e.stopPropagation();
-            }, true);
-        }
-
-        // Override Bootstrap's enforceFocus if it exists
-        // This runs after page load to catch dynamically created modals
-        setTimeout(() => {
-            this.disableBootstrapFocusTrap();
-        }, 1000);
-
-        // Also watch for new modals being shown
-        document.addEventListener('shown.bs.modal', () => {
-            this.disableBootstrapFocusTrap();
-        });
-    }
-
-    /**
-     * Disable Bootstrap's focus trap when our widget is active
-     */
-    /**
-     * Disable Bootstrap's focus trap when our widget is active
-     */
-    disableBootstrapFocusTrap() {
-        const widget = document.getElementById('smart-assistant-widget');
-
-        // STRATEGY 1: Bootstrap 4 Global Prototype Patch
-        // This fixes it for ALL modals, present and future
-        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.modal && window.jQuery.fn.modal.Constructor) {
-            const Constructor = window.jQuery.fn.modal.Constructor;
-
-            // Check if we already patted it
-            if (!Constructor.prototype.saPatched) {
-                const originalEnforceFocus = Constructor.prototype._enforceFocus;
-
-                Constructor.prototype._enforceFocus = function () {
-                    // This is the Bootstrap 4 logic, modified to allow our widget
-                    const $ = window.jQuery;
-                    const that = this;
-                    $(document)
-                        .off('focusin.bs.modal') // Turn off existing
-                        .on('focusin.bs.modal', function (e) {
-                            if (
-                                document === e.target ||
-                                that._element === e.target ||
-                                $(that._element).has(e.target).length ||
-                                // OUR FIX: Allow focus if it's inside our widget
-                                (widget && widget.contains(e.target))
-                            ) {
-                                return;
-                            }
-                            that._element.focus();
-                        });
-                };
-                Constructor.prototype.saPatched = true;
-                console.log('Smart Assistant: Applied global Bootstrap 4 focus fix');
-            }
-        }
-
-        // STRATEGY 2: Bootstrap 5 Instance Patching
-        // We have to do this per-instance as they are created
-        const modals = document.querySelectorAll('.modal.show');
-        modals.forEach(modal => {
-            const bsModal = window.bootstrap?.Modal?.getInstance(modal);
-            if (bsModal && bsModal._focustrap && !bsModal._focustrap.saPatched) {
-                const originalTrap = bsModal._focustrap._handleFocusin;
-                bsModal._focustrap._handleFocusin = (event) => {
-                    if (widget && widget.contains(event.target)) {
-                        return;
-                    }
-                    if (originalTrap) originalTrap.call(bsModal._focustrap, event);
-                };
-                bsModal._focustrap.saPatched = true;
-                console.log('Smart Assistant: Patched Bootstrap 5 modal instance');
-            }
-        });
-
-        // STRATEGY 3: jQuery Instance Patching (Fallback for BS4 instances already created)
-        if (window.jQuery) {
-            const $ = window.jQuery;
-            $('.modal.show').each(function () {
-                const modalData = $(this).data('bs.modal');
-                if (modalData && !modalData.saPatched) {
-                    const originalEnforceFocus = modalData._enforceFocus;
-                    modalData._enforceFocus = function () {
-                        $(document)
-                            .off('focusin.bs.modal')
-                            .on('focusin.bs.modal', (e) => {
-                                if (widget && widget.contains(e.target)) return;
-                                if (this._element !== e.target && !$(this._element).has(e.target).length) {
-                                    this._element.focus();
-                                }
-                            });
-                    };
-                    // Re-run it to apply the new handler
-                    modalData._enforceFocus();
-                    modalData.saPatched = true;
-                }
-            });
-        }
-    }
 
     /**
      * Force enable the input without any checks
@@ -460,102 +212,17 @@ class UIManager {
         this.setStatus('Scanning for issues...');
     }
 
-    // Scan for errors - IGNORES .invalid-feedback
+    /**
+     * Find error messages on the page and offer them as tags.
+     */
     scanForErrors() {
-        const foundErrors = [];
-        const seenErrors = new Set();
+        if (!this.features.page_scan) {
+            this.setStatus('How can I help you today?');
+            this.showChatInput();
+            return;
+        }
 
-        // ===== Context-Aware Element Selection =====
-        
-        // Level 1: Explicit real error IDs (MUST be included)
-        const realErrorIds = ['modal_error', 'modal_status_message', 'error-display'];
-        realErrorIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                const errorText = el.innerText?.trim();
-                if (errorText && errorText.length > 3 && errorText.length < 300) {
-                    if (!seenErrors.has(errorText)) {
-                        seenErrors.add(errorText);
-                        foundErrors.push(errorText);
-                    }
-                }
-            }
-        });
-
-        // Level 2: Alert boxes (high confidence errors)
-        const alertDangers = document.querySelectorAll('.alert-danger');
-        alertDangers.forEach(el => {
-            const errorText = el.innerText?.trim();
-            if (errorText && errorText.length > 3 && errorText.length < 300) {
-                if (!seenErrors.has(errorText)) {
-                    seenErrors.add(errorText);
-                    foundErrors.push(errorText);
-                }
-            }
-        });
-
-        // Level 3: Text-danger elements (with smart filtering)
-        const textDangers = document.querySelectorAll('.text-danger');
-        textDangers.forEach(el => {
-            // Skip if marked as placeholder
-            if (el.getAttribute('data-error-type') === 'placeholder') {
-                return;
-            }
-
-            // Skip if it's form validation
-            if (el.classList.contains('invalid-feedback') || el.classList.contains('help-block')) {
-                return;
-            }
-
-            // Skip if inside a form (likely validation message)
-            if (el.closest('form')) {
-                return;
-            }
-
-            // Skip elements with placeholder classes
-            if (el.classList.contains('loader-text') || 
-                el.classList.contains('loading-message') ||
-                el.classList.contains('placeholder') ||
-                el.classList.contains('responseMessage')) {
-                return;
-            }
-
-            // Skip known placeholder IDs
-            const elemId = el.getAttribute('id');
-            if (elemId && ['status', 'loading-message', 'loader-text', 'message'].includes(elemId)) {
-                return;
-            }
-
-            // Skip if parent is a modal body with empty content
-            const modalParent = el.closest('.modal-body');
-            if (modalParent && el.getAttribute('id') !== 'modal_error') {
-                // If it's empty or just placeholder text, skip it
-                const text = el.innerText?.trim();
-                if (!text || /^(transaction status|loading|please wait|processing)$/i.test(text)) {
-                    return;
-                }
-            }
-
-            const errorText = el.innerText?.trim();
-
-            // Validate error text
-            if (!errorText || errorText.length < 3 || errorText.length > 300) {
-                return;
-            }
-
-            // Skip common placeholder patterns
-            if (/^(transaction\s+status|loading\.\.*|please\s+wait|processing|capturing|fingerprint|balance|withdrawal|deposit|statement|abbreviation|your\s+device)$/i.test(errorText)) {
-                return;
-            }
-
-            // Avoid duplicates
-            if (seenErrors.has(errorText)) {
-                return;
-            }
-
-            seenErrors.add(errorText);
-            foundErrors.push(errorText);
-        });
+        const foundErrors = this.collectPageErrors();
 
         // ---------------------------------------------------------
         // ALERT SYSTEM LOGIC
@@ -606,6 +273,77 @@ class UIManager {
 
         // Always show chat input
         this.showChatInput();
+    }
+
+    /**
+     * Error texts on the page, by the widget.page_scan rules: ids and
+     * selectors always count; soft selectors only when no ignore rule applies.
+     * @returns {string[]} Unique texts in page order
+     */
+    collectPageErrors() {
+        const rules = this.pageScan || {};
+        const found = [];
+        const widget = document.getElementById('smart-assistant-widget');
+
+        const isOurs = (el) => (widget && widget.contains(el)) || el.closest('[data-sa-ignore]');
+        const addText = (text) => {
+            if (!found.includes(text)) found.push(text);
+        };
+
+        // Level 1 and 2: explicit error ids, then containers that always hold errors
+        const certain = [
+            ...(rules.ids || []).map(id => document.getElementById(id)).filter(Boolean),
+            ...this.queryAll(rules.selectors)
+        ];
+        certain.forEach(el => {
+            if (isOurs(el)) return;
+            const text = el.innerText?.trim();
+            if (text && text.length > 3 && text.length < 300) addText(text);
+        });
+
+        // Level 3: soft containers (e.g. .text-danger) with filtering
+        const ignoreClasses = rules.ignore_classes || [];
+        const ignoreIds = rules.ignore_ids || [];
+        const ignorePatterns = (rules.ignore_patterns || []).map(pattern => {
+            try {
+                return new RegExp(pattern, 'i');
+            } catch (e) {
+                console.warn('Smart Assistant: invalid page_scan ignore pattern', pattern);
+                return null;
+            }
+        }).filter(Boolean);
+
+        this.queryAll(rules.soft_selectors).forEach(el => {
+            if (isOurs(el)) return;
+            // Marked as placeholder by the page
+            if (el.getAttribute('data-error-type') === 'placeholder') return;
+            // Form validation messages and other known non-error classes
+            if (ignoreClasses.some(name => el.classList.contains(name))) return;
+            // Inside a form: most likely a validation message
+            if (el.closest('form')) return;
+            if (el.id && ignoreIds.includes(el.id)) return;
+
+            const text = el.innerText?.trim();
+            if (!text || text.length < 3 || text.length > 300) return;
+            // Labels and placeholders ("Loading...", "Please wait")
+            if (ignorePatterns.some(re => re.test(text))) return;
+
+            addText(text);
+        });
+
+        return found;
+    }
+
+    queryAll(selectors) {
+        const elements = [];
+        (selectors || []).forEach(selector => {
+            try {
+                elements.push(...document.querySelectorAll(selector));
+            } catch (e) {
+                console.warn('Smart Assistant: invalid page_scan selector', selector);
+            }
+        });
+        return elements;
     }
 
     setStatus(text) {
@@ -750,6 +488,50 @@ class UIManager {
         this.enableChatInput();
         setTimeout(() => this.enableChatInput(), 100);
         setTimeout(() => this.enableChatInput(), 300);
+
+        return bubble;
+    }
+
+    /**
+     * Add an assistant message with buttons under the text.
+     * @param {string} message - Plain text
+     * @param {Array<{label: string, secondary?: boolean, onClick: Function}>} buttons
+     * @returns {HTMLElement|undefined} The bubble, so the caller can replace its content
+     */
+    addActionMessage(message, buttons) {
+        return this.appendChatBubble(false, false, (bubble) => this.fillActionBubble(bubble, message, buttons));
+    }
+
+    fillActionBubble(bubble, message, buttons) {
+        bubble.replaceChildren();
+        this.appendText(bubble, message);
+
+        const row = document.createElement('div');
+        row.className = 'sa-chat-actions';
+
+        buttons.forEach(({ label, secondary, onClick }) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = secondary ? 'sa-action-btn sa-action-btn-secondary' : 'sa-action-btn';
+            button.textContent = label;
+            button.addEventListener('click', () => {
+                // One click per button set: stops double submissions
+                row.querySelectorAll('button').forEach(b => { b.disabled = true; });
+                onClick();
+            });
+            row.appendChild(button);
+        });
+
+        bubble.appendChild(row);
+        this.scrollChatToBottom();
+    }
+
+    /**
+     * Disable the buttons of earlier action messages (they refer to an older
+     * point in the conversation).
+     */
+    disableActionMessages() {
+        this.chatContainer?.querySelectorAll('.sa-chat-actions button').forEach(b => { b.disabled = true; });
     }
 
     scrollChatToBottom() {
@@ -975,6 +757,24 @@ class UIManager {
         }
     }
 }
+
+// legacy-host-start
+/**
+ * The scan rules built into releases before the page scan was configurable,
+ * used only for pages rendered by an older published view (no widget config).
+ * Remove together with the other legacy-host blocks.
+ */
+UIManager.LEGACY_PAGE_SCAN = {
+    ids: ['modal_error', 'modal_status_message', 'error-display'],
+    selectors: ['.alert-danger'],
+    soft_selectors: ['.text-danger'],
+    ignore_classes: ['invalid-feedback', 'help-block', 'loader-text', 'loading-message', 'placeholder', 'responseMessage'],
+    ignore_ids: ['status', 'loading-message', 'loader-text', 'message'],
+    ignore_patterns: [
+        '^(transaction\\s+status|loading\\.*|please\\s+wait|processing|capturing|fingerprint|balance|withdrawal|deposit|statement|abbreviation|your\\s+device)$'
+    ]
+};
+// legacy-host-end
 
 // Export for use in main script
 window.UIManager = UIManager;

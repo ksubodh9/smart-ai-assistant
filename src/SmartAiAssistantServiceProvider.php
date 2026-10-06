@@ -106,7 +106,12 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             return new ResponseCatalog(config('smart-ai-assistant.responses', []));
         });
 
-        $this->app->bind(Interpreter::class, RuleBasedInterpreter::class);
+        $this->app->bind(Interpreter::class, function ($app) {
+            return new RuleBasedInterpreter(
+                $app->make(InputClassifier::class),
+                (array) config('smart-ai-assistant.understanding.entities', []),
+            );
+        });
 
         $this->app->bind(KnowledgeSource::class, function () {
             return new DatabaseKnowledgeSource(config('smart-ai-assistant.default_service', 'general'));

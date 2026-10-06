@@ -60,4 +60,29 @@ class RuleBasedInterpreterTest extends TestCase
 
         $this->assertEqualsCanonicalizing(array_values($types), array_keys($intents));
     }
+
+    public function test_entities_are_extracted_by_the_configured_patterns(): void
+    {
+        $interpreter = new RuleBasedInterpreter(new InputClassifier(), [
+            'reference_id' => '/\b(TXN\d{6})\b/i',      // capture group is the value
+            'amount'       => '/\d+(?=\s*rupees)/',      // no group: the whole match
+            'missing'      => '/NOPE\d+/',
+        ]);
+
+        $problem = $interpreter->interpret(new IncomingMessage('txn123456 and TXN654321 failed, 500 rupees cut'));
+
+        $this->assertSame(['reference_id' => 'txn123456', 'amount' => '500'], $problem->entities);
+    }
+
+    public function test_a_broken_entity_pattern_is_ignored(): void
+    {
+        $interpreter = new RuleBasedInterpreter(new InputClassifier(), ['broken' => '/(unclosed/', 'ok' => '/TXN\d+/']);
+
+        $this->assertSame(['ok' => 'TXN1'], $interpreter->interpret(new IncomingMessage('TXN1 failed'))->entities);
+    }
+
+    public function test_no_entities_without_patterns(): void
+    {
+        $this->assertSame([], (new RuleBasedInterpreter(new InputClassifier()))->interpret(new IncomingMessage('TXN1 failed'))->entities);
+    }
 }

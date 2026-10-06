@@ -8,8 +8,10 @@ class APIManager {
         // Rendered by the widget view; older published views have no config block
         const config = this.readConfig();
         this.serverEscalation = config.features?.server_escalation === true;
+        this.resolveTypedMessages = config.features?.resolve_typed_messages === true;
         this.endpoints = {
             help: config.endpoints?.help || '/smart-assistant/help',
+            message: config.endpoints?.message || '/smart-assistant/message',
             escalate: config.endpoints?.escalate || '/smart-assistant/escalate',
             ticket: '/customer-support/raise/ticket'
         };
@@ -39,27 +41,49 @@ class APIManager {
     }
 
     readConfig() {
-        try {
-            return JSON.parse(document.getElementById('sa-config')?.textContent || '{}');
-        } catch (e) {
-            console.error('Smart Assistant: invalid sa-config block', e);
-            return {};
-        }
+        // Parsed once by ui-manager.js, which loads first
+        return window.SmartAssistantConfig || {};
     }
 
+    /**
+     * Ask the assistant about a page error the user picked.
+     */
     async sendErrorQuery(errorText, pageUrl) {
+        if (this.resolveTypedMessages) {
+            return this.sendMessage(errorText, 'page_error', pageUrl);
+        }
+
+        return this.postToAssistant(this.endpoints.help, {
+            error_text: errorText,
+            page_url: pageUrl || window.location.href,
+            conversation_id: this.getConversationId()
+        });
+    }
+
+    /**
+     * Ask the assistant about anything the user typed or picked. Never
+     * creates a ticket: unresolved replies carry an "escalate" action instead.
+     * @param {string} source - typed | page_error | suggestion
+     */
+    async sendMessage(text, source = 'typed', pageUrl = null) {
+        return this.postToAssistant(this.endpoints.message, {
+            text: text,
+            source: source,
+            page_url: pageUrl || window.location.href,
+            conversation_id: this.getConversationId()
+        });
+    }
+
+    async postToAssistant(endpoint, payload) {
         try {
-            const response = await fetch(this.endpoints.help, {
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': this.csrfToken
                 },
-                body: JSON.stringify({
-                    error_text: errorText,
-                    page_url: pageUrl || window.location.href,
-                    conversation_id: this.getConversationId()
-                })
+                body: JSON.stringify(payload)
             });
 
             if (response.status === 429) {
@@ -97,6 +121,8 @@ class APIManager {
         }
     }
 
+    // legacy-host-start: MaddoxPay ticket endpoint and page identity fields, used while
+    // features.server_escalation is off. Remove with the other legacy-host blocks.
     async sendChatMessage(message, attachments = [], errorContext = null) {
         if (this.serverEscalation) {
             return this.escalate(message, attachments, errorContext);
@@ -181,6 +207,7 @@ class APIManager {
             };
         }
     }
+    // legacy-host-end
 
     /**
      * Send a support request through the package endpoint. The server knows
@@ -256,6 +283,7 @@ class APIManager {
         }
     }
 
+    // legacy-host-start
     getUserData() {
         const maddoxId = document.getElementById('sa-user-maddox-id')?.value || '';
         const name = document.getElementById('sa-user-name')?.value || '';
@@ -273,6 +301,7 @@ class APIManager {
             phone
         };
     }
+    // legacy-host-end
 }
 
 // Export for use in main script

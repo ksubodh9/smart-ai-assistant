@@ -305,9 +305,11 @@ SmartAssistant (Main Controller)
 
 ## ⚙️ Backend Resolution Pipeline
 
-`POST /smart-assistant/help` is handled by a thin controller that hands the
-work to small, replaceable classes. The flow is the same for every host; what
-differs between hosts is configuration.
+`POST /smart-assistant/message` (typed text, picked page errors, suggestions)
+and the older `POST /smart-assistant/help` (page errors only) are thin
+controllers that hand the work to `Http\MessageResponder` and from there to
+small, replaceable classes. The flow is the same for every host; what differs
+between hosts is configuration. Neither endpoint creates a ticket.
 
 ```
 validate (max 1000 chars, page path only)
@@ -319,6 +321,8 @@ validate (max 1000 chars, page path only)
        strategies, in config order, first non-null wins:
          InputGuardStrategy          greeting / vague / noise / abuse → canned reply
          ExplicitEscalationStrategy  "talk to a human"     (capability: escalation)
+         DataToolStrategy            host DataTool for an entity in the message, after
+                                     authorize() (capability: data_tools)
          KnowledgeLookupStrategy     KnowledgeSource match (capability: knowledge)
          FallbackStrategy            "not documented" + raise-ticket hint
        guards, applied to the winner:
@@ -342,6 +346,23 @@ validate (max 1000 chars, page path only)
 | Identity | `Support\LaravelAuthUserContextResolver` | `user_resolver` |
 | Redaction | `Support\DefaultRedactor` | `redactor` |
 | Conversations | `Persistence\EloquentConversationStore` | `conversations.idle_minutes`, `conversations.retention_days` |
+| Data tools | host classes (`Core\Contracts\DataTool`) | `data_tools`, `understanding.entities`, `capabilities.data_tools` |
+
+**Data tools.** The package has no access to host tables. A host exposes one
+piece of data through a `DataTool`: the interpreter extracts entities with the
+host's regexes (`understanding.entities`), and the first tool whose
+`argumentSchema()` is fully covered runs for the logged-in user:
+
+```
+entities found? ─no→ next strategy
+  → tool.authorize(user, args) ─false→ "couldn't find that reference in your account"
+  → tool.execute(user, args)  → ToolResult (masked label/value pairs)
+  → key_value block + plain-text answer; audit log: tool, user id, outcome
+```
+
+"Not yours" and "does not exist" get the same reply, so nobody can find out
+whether a reference exists. Execute never runs without authorize. This is the
+same authorize path a future AI component would have to use.
 
 **Conversations.** One chat is one row in `smart_ai_conversations`. The
 widget keeps the id it gets back in `sessionStorage` and sends it with the next
@@ -359,9 +380,50 @@ fallbacks add a user and an AI message. Status: `open` → `resolved` /
 
 **Wire format (protocol 1).** `blocks` are `text` blocks, one per answer
 locale, with `format: "basic"` (`**bold**` and line breaks; rendered as text).
-`actions` offers `escalate` after unresolved replies and requests for a human;
-the widget does not render actions yet (plan step 6). The legacy fields stay
+`actions` offers `escalate` after unresolved replies, requests for a human and
+exits. The legacy fields stay
 for one release; `SmartAssistant.renderResponse()` prefers blocks.
+
+### Widget configuration (`widget`)
+
+The view is the same for every host; `Support\WidgetConfig` turns
+`config('smart-ai-assistant.widget')` into what it renders:
+
+```
+widget.branding   → escaped texts in the HTML; hex colours → CSS variables
+widget.features   → which buttons/scripts are rendered (attachments, screenshot,
+                    html2canvas, host-compat.js) + sa-config for the scripts
+widget.suggestions→ starter buttons (only with resolve_typed_messages)
+widget.page_scan  → sa-config → UIManager.collectPageErrors()
+```
+
+`host-compat.js` holds the Bootstrap modal focus fixes and the input
+re-enable observers, only for hosts that need them. Pages rendered by an older
+published view send no `widget` config; for them `UIManager` falls back to the
+old built-in scan rules and loads `host-compat.js` itself, so upgrading the
+package before deleting a customised view changes nothing.
+
+### Typed messages (`features.resolve_typed_messages`)
+
+```
+flag off (old flow)                    flag on
+───────────────────                    ───────
+typed text                             typed text
+  → JS pre-filter (junk/greeting/        → POST /message (source: typed)
+    vague answered locally)              → reply rendered from blocks
+  → ticket, immediately                  → if actions has "escalate":
+                                             [Raise ticket] → shows what will be sent
+                                             → [Send to support] → POST /escalate
+                                             → [Cancel]          → nothing sent
+```
+
+Files attached to a typed message stay in the preview and only go with a
+confirmed ticket; if the reply offers no ticket, the widget offers to send the
+attachment. Files without text skip the assistant and go straight to the offer.
+Error chips also use `/message` (source `page_error`) when the flag is on. The
+widget renders only action ids it has a handler for (`escalate`), so the server
+cannot make it run anything else. Ticket volume and resolution rate can be
+compared before and after through `smart_ai_conversations.status`.
 
 ### Escalation: `POST /smart-assistant/escalate`
 

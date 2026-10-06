@@ -26,8 +26,14 @@ class RuleBasedInterpreter implements Interpreter
         InputClassifier::TYPE_EMPTY              => StructuredProblem::INTENT_EMPTY,
     ];
 
-    public function __construct(private readonly InputClassifier $classifier)
-    {
+    /**
+     * @param  array<string, string>  $entityPatterns  Entity name => regex (config
+     *         understanding.entities); the first capture group, or the whole match, is the value
+     */
+    public function __construct(
+        private readonly InputClassifier $classifier,
+        private readonly array $entityPatterns = [],
+    ) {
     }
 
     public function interpret(IncomingMessage $message): StructuredProblem
@@ -38,6 +44,7 @@ class RuleBasedInterpreter implements Interpreter
         return new StructuredProblem(
             intent: self::INTENTS[$type],
             domains: $result['category'] !== null ? [$result['category']] : [],
+            entities: $this->entities($message->text),
             signals: [
                 'input_type'  => $type,
                 'abuse_level' => match ($type) {
@@ -47,5 +54,22 @@ class RuleBasedInterpreter implements Interpreter
                 },
             ],
         );
+    }
+
+    /**
+     * @return array<string, string> The first match of each configured entity
+     */
+    private function entities(string $text): array
+    {
+        $entities = [];
+
+        foreach ($this->entityPatterns as $name => $pattern) {
+            // A broken host pattern must not break the assistant; @ hides the warning
+            if (@preg_match($pattern, $text, $match) === 1) {
+                $entities[$name] = $match[1] ?? $match[0];
+            }
+        }
+
+        return $entities;
     }
 }

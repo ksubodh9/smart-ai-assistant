@@ -28,6 +28,12 @@ class ResponseCatalog
         // A guest tried to raise a support request
         'escalation_login_required' => ['en' => 'Please log in to contact support.'],
 
+        // A data tool found nothing the user may see (or the user may not see it)
+        'tool_not_found' => ['en' => "I couldn't find that reference in your account. Please check the number, or raise a ticket."],
+
+        // A data tool failed
+        'tool_failed' => ['en' => "I couldn't check that right now. Please try again in a few minutes, or raise a ticket."],
+
         // No knowledge matched
         'unknown'      => ['en' => "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support."],
 

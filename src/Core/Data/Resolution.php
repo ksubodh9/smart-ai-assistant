@@ -19,6 +19,8 @@ final class Resolution
      * @param  array{en: string, hi: ?string}  $answers
      * @param  bool  $persist  Whether the exchange is stored as a conversation
      * @param  array<string, mixed>  $provenance  e.g. ['strategy' => 'knowledge_lookup', 'knowledge_id' => 7]
+     * @param  list<array<string, mixed>>  $blocks  Wire-format blocks (e.g. key_value); when set they
+     *         replace the text blocks built from $answers, which remain the plain-text version
      */
     public function __construct(
         public readonly string $outcome,
@@ -26,6 +28,7 @@ final class Resolution
         public readonly array $answers,
         public readonly bool $persist = false,
         public readonly array $provenance = [],
+        public readonly array $blocks = [],
     ) {
     }
 }

@@ -1,21 +1,30 @@
 <?php
 /**
  * Blade component for the Smart AI Assistant widget.
- * Modern, WhatsApp/ChatGPT-inspired UI with error detection and file attachments
+ * Modern, WhatsApp/ChatGPT-inspired UI with error detection and file attachments.
+ *
+ * Everything host-specific (texts, colours, page scan rules, features) comes
+ * from config('smart-ai-assistant.widget') through Support\WidgetConfig, so
+ * hosts do not need to publish and edit this view.
  */
 ?>
 @php
+    $saWidget = \Subodh\SmartAiAssistant\Support\WidgetConfig::fromConfig();
     $saServerEscalation = (bool) config('smart-ai-assistant.features.server_escalation');
+    $saResolveTyped = (bool) config('smart-ai-assistant.features.resolve_typed_messages');
     $saAttachmentTypes = config('smart-ai-assistant.escalation.attachments.mimes', ['jpg', 'jpeg', 'png', 'pdf']);
     // Read by the widget scripts; holds no personal data
     $saConfig = [
         'endpoints' => [
             'help'     => route('smart-assistant.help', [], false),
+            'message'  => route('smart-assistant.message', [], false),
             'escalate' => route('smart-assistant.escalate', [], false),
         ],
         'features' => [
-            'server_escalation' => $saServerEscalation,
+            'server_escalation'      => $saServerEscalation,
+            'resolve_typed_messages' => $saResolveTyped,
         ],
+        'widget' => $saWidget->forScript(),
     ];
 @endphp
 <script type="application/json" id="sa-config">@json($saConfig)</script>
@@ -33,10 +42,10 @@
         <!-- Header -->
         <div class="sa-header">
             <div class="sa-header-title">
-                <span class="sa-header-icon">🤖</span>
-                <span>Chat with Soniya</span>
+                <span class="sa-header-icon">{{ $saWidget->branding('icon') }}</span>
+                <span>{{ $saWidget->branding('title') }}</span>
             </div>
-            <button id="smart-assistant-close" aria-label="Close Assistant">×</button>
+            <button id="smart-assistant-close" aria-label="Close Assistant"><span aria-hidden="true">&times;</span></button>
         </div>
 
         <!-- Content Area -->
@@ -45,8 +54,17 @@
             <!-- Welcome Message -->
             <div id="sa-welcome-message">
                 <div class="sa-welcome-icon">👋</div>
-                <div class="sa-welcome-title">Hello! I'm Soniya</div>
-                <div class="sa-welcome-subtitle">How may I assist you today?</div>
+                <div class="sa-welcome-title">{{ $saWidget->branding('welcome_title') }}</div>
+                <div class="sa-welcome-subtitle">{{ $saWidget->branding('welcome_subtitle') }}</div>
+
+                {{-- Starter questions are sent like typed messages, so they need the assistant to answer typed text --}}
+                @if($saResolveTyped && $saWidget->suggestions())
+                    <div id="sa-suggestions">
+                        @foreach($saWidget->suggestions() as $saSuggestion)
+                            <button type="button" class="sa-suggestion" data-send="{{ $saSuggestion }}">{{ $saSuggestion }}</button>
+                        @endforeach
+                    </div>
+                @endif
             </div>
 
             <!-- Status Text -->
@@ -69,6 +87,7 @@
         <!-- Chat Input Bar -->
         <div id="sa-chat-input-bar">
             <div class="sa-input-wrapper">
+                @if($saWidget->feature('attachments'))
                 <!-- Attachment Button -->
                 <button id="sa-attach-btn" type="button" aria-label="Attach file" title="Attach file">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -76,6 +95,11 @@
                     </svg>
                 </button>
 
+                <!-- Hidden File Input -->
+                <input type="file" id="sa-file-upload" style="display: none;" accept="{{ '.' . implode(',.', $saAttachmentTypes) }}">
+                @endif
+
+                @if($saWidget->feature('screenshot'))
                 <!-- Screenshot Button -->
                 <button id="sa-screenshot-btn" type="button" aria-label="Take screenshot" title="Capture screenshot">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -83,9 +107,7 @@
                         <circle cx="12" cy="13" r="4"></circle>
                     </svg>
                 </button>
-
-                <!-- Hidden File Input -->
-                <input type="file" id="sa-file-upload" style="display: none;" accept="{{ '.' . implode(',.', $saAttachmentTypes) }}">
+                @endif
 
                 <!-- Message Textarea -->
                 <textarea 
@@ -105,29 +127,40 @@
             </button>
         </div>
 
+        @if($saWidget->branding('footer'))
         <!-- Footer -->
         <div class="sa-footer">
-            Powered by Maddox AI
+            {{ $saWidget->branding('footer') }}
         </div>
+        @endif
 
-        <!-- Hidden User Data for the host ticket endpoint; not rendered with server escalation, removed once that is the default -->
+        {{-- legacy-host-start: identity fields for the MaddoxPay ticket endpoint; not rendered with
+             server escalation. Remove with the other legacy-host blocks once that is the default. --}}
         @if(! $saServerEscalation && class_exists('Sentinel') && Sentinel::check())
             @php $user = Sentinel::getUser(); @endphp
             <input type="hidden" id="sa-user-maddox-id" value="{{ $user->maddox_id }}">
             <input type="hidden" id="sa-user-name" value="{{ $user->full_name }}">
             <input type="hidden" id="sa-user-phone" value="{{ $user->phone_no }}">
         @endif
+        {{-- legacy-host-end --}}
     </div>
 </div>
 
 <!-- Load CSS -->
 <link rel="stylesheet" href="{{ asset('vendor/smart-ai-assistant/css/assistant.css') }}">
+<!-- Brand colours from config (after the stylesheet, so they override its defaults) -->
+<style>:root { @foreach($saWidget->cssVariables() as $saName => $saValue){{ $saName }}: {{ $saValue }}; @endforeach}</style>
 
+@if($saWidget->feature('screenshot'))
 <!-- Load html2canvas 1.4.1 (MIT) for screenshot capture; bundled, not loaded from a CDN -->
 <script src="{{ asset('vendor/smart-ai-assistant/js/vendor/html2canvas.min.js') }}"></script>
+@endif
 
 <!-- Load JavaScript Modules -->
 <script src="{{ asset('vendor/smart-ai-assistant/js/ui-manager.js') }}"></script>
+@if($saWidget->feature('bootstrap_modal_compat'))
+<script src="{{ asset('vendor/smart-ai-assistant/js/host-compat.js') }}"></script>
+@endif
 <script src="{{ asset('vendor/smart-ai-assistant/js/api-manager.js') }}"></script>
 <script src="{{ asset('vendor/smart-ai-assistant/js/file-preview.js') }}"></script>
 <script src="{{ asset('vendor/smart-ai-assistant/js/assistant.js') }}"></script>

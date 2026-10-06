@@ -195,7 +195,7 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('hello')
             ->assertOk()
-            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null));
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null, ['actions' => [self::ESCALATE_ACTION]]));
 
         // The canned-reply guard is not cleared on exit, so it keeps exiting.
         $this->ask('hello')->assertJson(['source' => 'exit']);
@@ -441,7 +441,7 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('capture timeout')
             ->assertOk()
-            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null));
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null, ['actions' => [self::ESCALATE_ACTION]]));
 
         // The hash is forgotten on exit, so the third identical request is answered again.
         $this->ask('capture timeout')->assertJson(['source' => 'kb']);

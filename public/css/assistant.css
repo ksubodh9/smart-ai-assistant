@@ -3,6 +3,16 @@
  * WhatsApp/ChatGPT inspired design with screenshot selection capture
  */
 
+/* ===== BRAND COLOURS =====
+ * Defaults; the widget view overrides them from config('smart-ai-assistant.widget.branding').
+ * The *-rgb forms are for rgba() transparency. */
+:root {
+    --sa-primary: #667eea;
+    --sa-secondary: #764ba2;
+    --sa-primary-rgb: 102, 126, 234;
+    --sa-secondary-rgb: 118, 75, 162;
+}
+
 /* ===== WIDGET CONTAINER ===== */
 #smart-assistant-widget {
     position: fixed;
@@ -14,13 +24,13 @@
 
 /* ===== TOGGLE BUTTON ===== */
 #smart-assistant-toggle {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
     color: #fff;
     border: none;
     border-radius: 50%;
     width: 64px;
     height: 64px;
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 24px rgba(var(--sa-primary-rgb), 0.4);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -46,7 +56,7 @@
 
 #smart-assistant-toggle:hover {
     transform: scale(1.08) translateY(-2px);
-    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 12px 32px rgba(var(--sa-primary-rgb), 0.5);
 }
 
 #smart-assistant-toggle:hover::before {
@@ -85,7 +95,7 @@
 
 /* ===== HEADER ===== */
 .sa-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
     padding: 20px;
     color: white;
     display: flex;
@@ -223,6 +233,29 @@
     color: #718096;
 }
 
+/* Starter questions under the welcome text */
+#sa-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.sa-suggestion {
+    background: white;
+    color: var(--sa-primary);
+    border: 1px solid rgba(var(--sa-primary-rgb), 0.4);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.sa-suggestion:hover {
+    background: rgba(var(--sa-primary-rgb), 0.1);
+}
+
 /* ===== STATUS TEXT ===== */
 #smart-assistant-status {
     font-size: 13px;
@@ -267,8 +300,8 @@
 }
 
 .sa-error-tag-selected {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
+    border-color: var(--sa-primary);
     color: white;
 }
 
@@ -321,7 +354,7 @@
 }
 
 .sa-chat-user .sa-chat-bubble {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
     color: white;
     border-bottom-right-radius: 4px;
 }
@@ -337,6 +370,41 @@
     background: #fff5f5;
     border-color: #feb2b2;
     color: #c53030;
+}
+
+/* Buttons inside an assistant message (e.g. "Raise ticket") */
+.sa-chat-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.sa-action-btn {
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.sa-action-btn-secondary {
+    background: white;
+    color: #4a5568;
+    border: 1px solid #cbd5e0;
+}
+
+.sa-action-btn:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.sa-action-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 /* ===== TYPING INDICATOR ===== */
@@ -403,9 +471,9 @@
 }
 
 .sa-input-wrapper:focus-within {
-    border-color: #667eea;
+    border-color: var(--sa-primary);
     background: white;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 0 0 3px rgba(var(--sa-primary-rgb), 0.1);
 }
 
 #sa-attach-btn,
@@ -425,13 +493,13 @@
 
 #sa-attach-btn:hover,
 #sa-screenshot-btn:hover {
-    color: #667eea;
-    background: rgba(102, 126, 234, 0.1);
+    color: var(--sa-primary);
+    background: rgba(var(--sa-primary-rgb), 0.1);
 }
 
 #sa-screenshot-btn.sa-capturing {
     animation: pulse 1s infinite;
-    color: #667eea;
+    color: var(--sa-primary);
 }
 
 @keyframes pulse {
@@ -469,7 +537,7 @@
 }
 
 #sa-send-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
     border: none;
     width: 40px;
     height: 40px;
@@ -484,7 +552,7 @@
 
 #sa-send-btn:hover:not(:disabled) {
     transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(var(--sa-primary-rgb), 0.4);
 }
 
 #sa-send-btn:active:not(:disabled) {
@@ -523,8 +591,8 @@
 }
 
 .sa-screenshot-preview-item {
-    border-color: #667eea;
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    border-color: var(--sa-primary);
+    background: linear-gradient(135deg, rgba(var(--sa-primary-rgb), 0.05) 0%, rgba(var(--sa-secondary-rgb), 0.05) 100%);
 }
 
 .sa-file-thumbnail,
@@ -566,7 +634,7 @@
 }
 
 .sa-screenshot-name {
-    color: #667eea;
+    color: var(--sa-primary);
 }
 
 .sa-file-size,
@@ -743,14 +811,14 @@
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--sa-primary) 0%, var(--sa-secondary) 100%);
     color: white;
     padding: 14px 28px;
     border-radius: 30px;
     font-size: 15px;
     font-weight: 500;
     z-index: 100000;
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 20px rgba(var(--sa-primary-rgb), 0.4);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -779,7 +847,7 @@
 
 .sa-selection-box {
     position: fixed;
-    border: 3px solid #667eea;
+    border: 3px solid var(--sa-primary);
     background: transparent;
     pointer-events: none;
     z-index: 100001;
@@ -803,7 +871,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(102, 126, 234, 0.1);
+    background: rgba(var(--sa-primary-rgb), 0.1);
 }
 
 .sa-selection-dimensions {
@@ -811,7 +879,7 @@
     bottom: -28px;
     left: 50%;
     transform: translateX(-50%);
-    background: #667eea;
+    background: var(--sa-primary);
     color: white;
     padding: 4px 12px;
     border-radius: 4px;

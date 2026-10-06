@@ -8,33 +8,39 @@ use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
 use Subodh\SmartAiAssistant\Http\MessageResponder;
 
 /**
- * POST /smart-assistant/help: a page error the user picked. Kept for widgets
- * released before /message; same pipeline and response.
+ * POST /smart-assistant/message: anything the user sends the assistant, typed
+ * or picked. Nothing here creates a ticket; an unresolved reply offers the
+ * "escalate" action, which the widget sends to /escalate once the user confirms.
  */
-class ErrorHelpController extends Controller
+class MessageController extends Controller
 {
+    private const SOURCES = [
+        IncomingMessage::SOURCE_TYPED,
+        IncomingMessage::SOURCE_PAGE_ERROR,
+        IncomingMessage::SOURCE_SUGGESTION,
+    ];
+
     /**
      * Expected payload:
-     *   - error_text (string, required)
+     *   - text (string, required)
+     *   - source (typed|page_error|suggestion, optional, default typed)
      *   - page_url (string, optional)
      *   - conversation_id (int, optional): from the previous response; only
      *     honoured for the same user (or guest session)
-     *
-     * The responder is method-injected, not constructor-injected: the router
-     * reuses controller instances, and it depends on per-request config.
      */
     public function store(Request $request, MessageResponder $responder)
     {
         $validated = $request->validate([
-            'error_text'      => 'required|string|max:1000',
+            'text'            => 'required|string|max:1000',
+            'source'          => 'nullable|in:' . implode(',', self::SOURCES),
             'page_url'        => 'nullable|string|max:2048',
             'conversation_id' => 'nullable|integer',
         ]);
 
         return response()->json($responder->respond(
             $request,
-            $validated['error_text'],
-            IncomingMessage::SOURCE_PAGE_ERROR,
+            $validated['text'],
+            $validated['source'] ?? IncomingMessage::SOURCE_TYPED,
             $validated['page_url'] ?? null,
             isset($validated['conversation_id']) ? (int) $validated['conversation_id'] : null,
         ));

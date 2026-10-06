@@ -48,4 +48,29 @@ class PackageBoundaryTest extends TestCase
 
         $this->assertSame([], $offenders);
     }
+
+    public function test_widget_view_and_scripts_carry_no_host_branding_or_vocabulary(): void
+    {
+        // Branding and scan rules come from config('smart-ai-assistant.widget').
+        // Blocks between legacy-host-start and legacy-host-end are the old
+        // MaddoxPay ticket path and scan rules, kept until the flags are default-on.
+        $vocabulary = '/\b(aeps|irctc|recharge|payout|maddox\w*|soniya|namaste|withdrawal|fingerprint)\b/i';
+        $files = array_merge(
+            glob(__DIR__ . '/../../resources/views/components/*.blade.php'),
+            glob(__DIR__ . '/../../public/js/*.js'),   // not js/vendor
+            [__DIR__ . '/../../public/css/assistant.css'],
+        );
+        $offenders = [];
+
+        foreach ($files as $file) {
+            $code = preg_replace('/legacy-host-start.*?legacy-host-end/s', '', file_get_contents($file));
+
+            if (preg_match($vocabulary, $code, $match)) {
+                $offenders[] = basename($file) . ": {$match[0]}";
+            }
+        }
+
+        $this->assertNotEmpty($files);
+        $this->assertSame([], $offenders);
+    }
 }

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Subodh\SmartAiAssistant\Http\Controllers\ErrorHelpController;
 use Subodh\SmartAiAssistant\Http\Controllers\EscalationController;
+use Subodh\SmartAiAssistant\Http\Controllers\MessageController;
 
 Route::group([
     'prefix' => 'smart-assistant',
@@ -13,5 +14,6 @@ Route::group([
     ),
 ], function () {
     Route::post('/help', [ErrorHelpController::class, 'store'])->name('smart-assistant.help');
+    Route::post('/message', [MessageController::class, 'store'])->name('smart-assistant.message');
     Route::post('/escalate', [EscalationController::class, 'store'])->name('smart-assistant.escalate');
 });
