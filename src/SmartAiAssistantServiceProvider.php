@@ -15,7 +15,9 @@ use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
 use Subodh\SmartAiAssistant\Escalation\NullEscalationChannel;
+use Subodh\SmartAiAssistant\Knowledge\CompositeKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource;
+use Subodh\SmartAiAssistant\Knowledge\KeywordKnowledgeSource;
 use Subodh\SmartAiAssistant\Persistence\EloquentConversationStore;
 use Subodh\SmartAiAssistant\Resolution\StrategyRegistry;
 use Subodh\SmartAiAssistant\Support\DefaultRedactor;
@@ -113,8 +115,25 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->bind(KnowledgeSource::class, function () {
+        $this->app->bind(DatabaseKnowledgeSource::class, function () {
             return new DatabaseKnowledgeSource(config('smart-ai-assistant.default_service', 'general'));
+        });
+
+        $this->app->bind(KeywordKnowledgeSource::class, function () {
+            return new KeywordKnowledgeSource(
+                config('smart-ai-assistant.default_service', 'general'),
+                (array) config('smart-ai-assistant.knowledge.synonyms', []),
+                (bool) config('smart-ai-assistant.knowledge.typo_tolerance', true),
+            );
+        });
+
+        // The configured sources in order; the first that finds anything answers
+        $this->app->bind(KnowledgeSource::class, function ($app) {
+            return new CompositeKnowledgeSource(array_map(
+                fn ($class) => $app->make($class),
+                // A host 'knowledge' block without 'sources' keeps both default sources
+                (array) config('smart-ai-assistant.knowledge.sources', [DatabaseKnowledgeSource::class, KeywordKnowledgeSource::class])
+            ));
         });
 
         // Conversations also hold the guards' state (see ConversationStore::state)
@@ -145,6 +164,7 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             $this->commands([
                 \Subodh\SmartAiAssistant\Console\Commands\SeedKbFromCsv::class,
                 \Subodh\SmartAiAssistant\Console\Commands\PruneConversations::class,
+                \Subodh\SmartAiAssistant\Console\Commands\EvaluateQueries::class,
             ]);
         }
     }

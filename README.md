@@ -173,6 +173,16 @@ domain `general`). Publish the config once
     check that the user may see the record, and `execute()` must return masked,
     display-safe values only. List the whole `capabilities` array, since
     top-level keys replace the package default.
+13. `knowledge.synonyms` and keyword entries: for free-text complaints that
+    never contain an exact error text. Seed rows with
+    `php artisan smart-ai:seed-kb keywords.csv --keywords`, where column A
+    lists words that must all appear (in any order), e.g. `pan refund`, and map
+    your users' spellings to those words, e.g.
+    `'not' => ['nahi', 'nhi', 'नहीं']`. Longer words also match with a small
+    spelling mistake ("incompleate"); set `knowledge.typo_tolerance` to false
+    to require exact words. Measure the effect with `smart-ai:eval`; its
+    "answerable by a data tool" line counts queries a tool would answer for a
+    logged-in user.
 
 The config is merged one level deep: a top-level key in your file replaces the
 package's value for that key entirely. The exception is `widget`, whose
@@ -294,6 +304,26 @@ packages/smart-ai-assistant/
 ```
 
 ---
+
+## 📈 Measuring coverage (`smart-ai:eval`)
+
+Before adding rules, knowledge or AI, measure what the assistant answers today:
+
+```bash
+php artisan smart-ai:eval queries.csv --json=before.json
+# ... add KB rows, patterns, a data tool ...
+php artisan smart-ai:eval queries.csv --baseline=before.json
+```
+
+The file (CSV or Excel, row 1 a header) holds real user queries in column A,
+optionally the expected outcome or source in B (`answered`, `unresolved`,
+`clarify`, `escalate`, `kb`, `unknown`, ...) and the expected category in C.
+Support tickets work well as a source. Each query is resolved like a typed
+message from a new guest conversation; nothing is stored. The report shows
+outcome and category shares, how many queries contain a data-tool entity, label
+accuracy, and the most frequent unanswered queries (`--list=clarify` for
+another outcome), with personal data masked. The query file itself holds real
+customer text: keep it out of the repository and delete it after use.
 
 ## 🧪 Testing
 

@@ -4,8 +4,9 @@ namespace Subodh\SmartAiAssistant\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Subodh\SmartAiAssistant\Knowledge\KeywordKnowledgeSource;
 use Subodh\SmartAiAssistant\Models\ErrorDefinition;
- use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class SeedKbFromCsv extends Command
 {
@@ -16,7 +17,8 @@ class SeedKbFromCsv extends Command
      */
     protected $signature = 'smart-ai:seed-kb
         {file : The path to the CSV or Excel file}
-        {--domain= : Knowledge domain (service) for the entries; defaults to config default_service}';
+        {--domain= : Knowledge domain (service) for the entries; defaults to config default_service}
+        {--keywords : Column A holds keywords ("pan refund"), matched in any order, instead of exact error text}';
 
     /**
      * The console command description.
@@ -86,6 +88,13 @@ class SeedKbFromCsv extends Command
                 continue;
             }
 
+            // Keyword files are often templates with answers still to write:
+            // an entry without an answer would reply with nothing
+            if ($this->option('keywords') && $ansEng === '') {
+                $skippedWithoutAnswer = ($skippedWithoutAnswer ?? 0) + 1;
+                continue;
+            }
+
             // Insert or Update
             ErrorDefinition::updateOrCreate(
                 [
@@ -95,6 +104,8 @@ class SeedKbFromCsv extends Command
                 [
                     'answer_en' => $ansEng,
                     'answer_hi' => $ansHin,
+                    // Keyword entries are matched by KeywordKnowledgeSource only
+                    'meta'      => $this->option('keywords') ? ['match' => KeywordKnowledgeSource::MATCH_TYPE] : null,
                 ]
             );
 
@@ -102,6 +113,10 @@ class SeedKbFromCsv extends Command
         }
 
         $this->info("Successfully seeded {$count} entries into the Knowledge Base ({$service}).");
+
+        if (!empty($skippedWithoutAnswer)) {
+            $this->warn("Skipped {$skippedWithoutAnswer} keyword rows without an English answer (column B).");
+        }
         return 0;
     }
 

@@ -74,6 +74,26 @@ return [
     // conversations (the "service" column of the KB table).
     'default_service' => env('SMART_AI_DEFAULT_SERVICE', 'general'),
 
+    // Where answers come from, tried in order; the first that finds anything answers.
+    'knowledge' => [
+        'sources' => [
+            // Entries whose text appears in the message (e.g. page error texts)
+            \Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource::class,
+            // Entries whose words all appear in the message, in any order
+            // (seeded with smart-ai:seed-kb --keywords)
+            \Subodh\SmartAiAssistant\Knowledge\KeywordKnowledgeSource::class,
+        ],
+
+        // For keyword entries: word => spellings, synonyms and translations
+        // that count as that word, e.g. 'refund' => ['refnd', 'reimbursement'].
+        // Single words only; variants are matched case-insensitively.
+        'synonyms' => [],
+
+        // Keyword words of 5+ Latin letters also match with a small spelling
+        // mistake (same first letter; 1 edit, 2 for words over 8 letters).
+        'typo_tolerance' => true,
+    ],
+
     // Features the host enables. Strategies that need a disabled capability
     // are skipped.
     'capabilities' => [

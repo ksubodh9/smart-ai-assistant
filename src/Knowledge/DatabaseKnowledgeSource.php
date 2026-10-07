@@ -40,7 +40,7 @@ class DatabaseKnowledgeSource implements KnowledgeSource
 
         // First try a case-insensitive LIKE query where the key_text appears anywhere.
         // "%" and "_" in key_text are escaped, so they match literally.
-        $query = ErrorDefinition::where('service', $this->service);
+        $query = $this->textEntries();
         $escapedKey = "REPLACE(REPLACE(REPLACE(LOWER(key_text), '!', '!!'), '%', '!%'), '_', '!_')";
         $pattern = $query->getConnection()->getDriverName() === 'sqlite'
             ? "'%' || {$escapedKey} || '%'"
@@ -57,7 +57,7 @@ class DatabaseKnowledgeSource implements KnowledgeSource
         // Fallback for collations where SQL LOWER/LIKE and PHP disagree. Capped,
         // because it loads rows into PHP.
         $lowerText = Str::lower($text);
-        $candidates = ErrorDefinition::where('service', $this->service)
+        $candidates = $this->textEntries()
             ->orderBy('id')
             ->limit(self::FALLBACK_LIMIT)
             ->get();
@@ -69,6 +69,19 @@ class DatabaseKnowledgeSource implements KnowledgeSource
         }
 
         return null;
+    }
+
+    /**
+     * Entries of the configured service matched by text. Keyword entries
+     * (KeywordKnowledgeSource) are left out: their short words would match
+     * inside other words.
+     */
+    private function textEntries()
+    {
+        return ErrorDefinition::where('service', $this->service)
+            ->where(fn ($query) => $query
+                ->whereNull('meta->match')
+                ->orWhere('meta->match', '!=', KeywordKnowledgeSource::MATCH_TYPE));
     }
 
     private function toEntry(ErrorDefinition $definition): KnowledgeEntry

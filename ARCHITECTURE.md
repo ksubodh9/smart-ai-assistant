@@ -347,6 +347,7 @@ validate (max 1000 chars, page path only)
 | Redaction | `Support\DefaultRedactor` | `redactor` |
 | Conversations | `Persistence\EloquentConversationStore` | `conversations.idle_minutes`, `conversations.retention_days` |
 | Data tools | host classes (`Core\Contracts\DataTool`) | `data_tools`, `understanding.entities`, `capabilities.data_tools` |
+| Knowledge sources | `Knowledge\CompositeKnowledgeSource` over `DatabaseKnowledgeSource` (exact text) then `KeywordKnowledgeSource` (all words, any order) | `knowledge.sources`, `knowledge.synonyms`, `seed-kb --keywords` |
 
 **Data tools.** The package has no access to host tables. A host exposes one
 piece of data through a `DataTool`: the interpreter extracts entities with the
@@ -383,6 +384,16 @@ locale, with `format: "basic"` (`**bold**` and line breaks; rendered as text).
 `actions` offers `escalate` after unresolved replies, requests for a human and
 exits. The legacy fields stay
 for one release; `SmartAssistant.renderResponse()` prefers blocks.
+
+### Evaluation (`smart-ai:eval`)
+
+`Evaluation\Evaluator` replays queries through the bound `Interpreter` and
+`ResolverPipeline`, each with a fresh `InMemoryConversationState` and a guest
+`UserContext`, without the `ConversationStore`. It counts outcomes, sources,
+categories and entities, scores optional labels, and groups the texts of one
+outcome (normalized and redacted). `Evaluator::summary()` gives the percentages
+saved with `--json` and compared with `--baseline`, so every change to rules,
+knowledge or tools has a before/after number.
 
 ### Widget configuration (`widget`)
 
