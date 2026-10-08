@@ -493,3 +493,34 @@ The exit criteria for this phase are:
 - the package controller no longer references Sentinel
 - MaddoxPay vocabulary lives only in host config
 - the characterization and unit test suites pass
+
+---
+
+## 13. Next phase: natural replies and document answers (steps 10–15)
+
+Decided after step 9. The deterministic pipeline, fallback and escalation stay
+as they are; this phase adds one reply language per message and, later, answers
+grounded in documents the host provides. The package never holds product
+knowledge itself.
+
+| Step | What | Behaviour change | Depends on |
+|---|---|---|---|
+| **10. Conversational replies and reply language** *(done)* | `Support\Locales` + config `locales`: the reply language is the widget's menu choice, else the message's language (script, host word patterns, catch-all), else the conversation's, else the host's, else the default. Per-language maps in `Resolution`, `ResponseCatalog`, serializer and store; one text block per reply + `meta.locale`. Conversational texts, no category prefixes (`unknown_category` instead). Widget: no "Solution"/"हिंदी में" headings, language menu, "Raise ticket" inside the reply bubble. | **Yes** | — |
+| **11. Baseline evaluation** *(rules-only part done)* | Run `smart-ai:eval` on the real queries; keep the JSON as the "before" number. Done on 3,029 labelled tickets with an empty KB: 2.6% of expected outcomes matched. MaddoxPay routing config then tuned (escalation for activation/cancel/install/account-change requests, vague for bare service names, 8 more categories, category kept on escalation and vague): 16.5% matched, "not documented" 97.2% → 81.8%. Still to do: the same run in the host against the real KB (needs a release), and the team's `answer_exists` column. | Host routing | Labelled sheet |
+| **12. Document ingestion** | Tables `smart_ai_documents` (title, file, mime, checksum, scope, `audience` public/users, version, active/archived) and `smart_ai_document_chunks` (FULLTEXT). `TextExtractor` contract (PDF, DOCX, XLSX/CSV, TXT/MD/HTML); `smart-ai:ingest`. Re-upload by title = new version; same checksum = no-op. | None | — |
+| **13. Document retrieval** | `DocumentKnowledgeSource` (FULLTEXT; LIKE on SQLite), filtered by audience and active version **in SQL**. Registered separately (passages are not answers), not in `knowledge.sources`. Eval reports retrieval hits. | None | 12 |
+| **14. Grounded answers** | `AnswerGenerator` contract (one HTTP driver + null driver) and `DocumentAnswerStrategy` between `knowledge_lookup` and `fallback`, capability `document_answers` (off by default). No passage above `min_score` → no LLM call; `answerable: false`, error or timeout → `null` → unchanged fallback + "Raise ticket". Redacted question only; answers cite the source document and are stored with document ids and versions. | Only with the flag | 10, 13 |
+| **15. Measure and roll out** | Eval against the step 11 baseline; host ingests its first documents and enables the flag. | Host | 11, 14 |
+
+Out of scope for this phase: embeddings / vector DB, LLM tool calling or
+agents, conversation memory, automatic knowledge generation, upload UI, OCR,
+queues, streaming.
+
+Effect on §11: the reply-language policy is decided (storage for a third KB
+language is still deferred); the LLM client shape and a second knowledge kind
+get decided in steps 12–14; vector storage stays deferred.
+
+Open decisions before step 14: LLM provider/model; whether sending redacted
+questions and document passages to it is allowed; document answers for
+logged-in users only or guests too; whether to show the source document title;
+LLM timeout and cost limit.

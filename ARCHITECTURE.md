@@ -379,8 +379,20 @@ fallbacks add a user and an AI message. Status: `open` → `resolved` /
 (final). `php artisan smart-ai:prune` deletes conversations idle longer than
 `retention_days`; hosts schedule it.
 
-**Wire format (protocol 1).** `blocks` are `text` blocks, one per answer
-locale, with `format: "basic"` (`**bold**` and line breaks; rendered as text).
+**Reply language.** `Support\Locales` (config `locales`) chooses one language
+per reply: the `locale` the widget sends (its language menu; `auto` skips
+this), else the language the message is written in
+(`StructuredProblem::$signals['language']`: by script, by host word patterns,
+or the catch-all language for 3+ words), else the language used earlier in the
+conversation (`meta.state`), else `UserContext::$locale`, else the default.
+Strategies return every translation they have (`Resolution::$answers`, code =>
+text); the serializer and the store pick one, following each language's
+`fallback` and then the default.
+
+**Wire format (protocol 1).** `blocks` holds one `text` block in the reply
+language (its `locale` names the language actually shown, which differs when a
+translation is missing), with `format: "basic"` (`**bold**` and line breaks;
+rendered as text). `meta.locale` is the reply language.
 `actions` offers `escalate` after unresolved replies, requests for a human and
 exits. The legacy fields stay
 for one release; `SmartAssistant.renderResponse()` prefers blocks.

@@ -15,17 +15,23 @@ use Subodh\SmartAiAssistant\Tests\TestCase;
  * They pin the exact JSON and persistence behaviour of ErrorHelpController.
  * Step 5 changed it on purpose: protocol 1 fields next to the legacy ones, one
  * conversation per chat holding the guard state, status from the outcome.
+ * Step 10 changed it on purpose: one text block in the reply language,
+ * conversational texts, no category prefixes.
  * Cases marked "KNOWN BUG" / "KNOWN GAP" record current behaviour on purpose.
  */
 class HelpEndpointTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const EXIT_MESSAGE = "I've shared all available guidance for this issue.\nPlease contact support if further assistance is required.";
+    private const EXIT_EN = "I've shared everything I have on this. Our support team can take it from here.";
 
-    private const UNKNOWN_EN = "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support.";
+    private const EXIT_HI = 'इस बारे में मेरे पास जितनी जानकारी थी, मैंने बता दी है। आगे हमारी सपोर्ट टीम आपकी मदद कर सकती है।';
 
-    private const UNKNOWN_HI = "यह त्रुटि अभी दस्तावेज़ में नहीं है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें।";
+    private const UNKNOWN_EN = "Sorry, I don't have an answer for that yet. Our support team can look into it for you.";
+
+    private const UNKNOWN_AEPS_EN = "Sorry, I don't have an answer for this **AEPS** query yet. Our support team can look into it for you.";
+
+    private const UNKNOWN_AEPS_HI = 'माफ़ कीजिए, **AEPS** से जुड़े इस सवाल की जानकारी अभी मेरे पास नहीं है। हमारी सपोर्ट टीम इसमें आपकी मदद कर सकती है।';
 
     private const ESCALATE_ACTION = ['type' => 'action', 'id' => 'escalate', 'label' => 'Raise ticket', 'confirm' => true];
 
@@ -60,21 +66,17 @@ class HelpEndpointTest extends TestCase
     }
 
     /**
-     * The full response for a reply: protocol 1 fields plus the legacy ones.
+     * The full response for an English reply: protocol 1 fields (one text
+     * block) plus the legacy ones, which still carry both languages.
      */
     private function reply(string $source, string $inputType, string $en, ?string $hi, array $extra = []): array
     {
-        $blocks = [['type' => 'text', 'format' => 'basic', 'locale' => 'en', 'text' => $en]];
-        if ($hi !== null && $hi !== '') {
-            $blocks[] = ['type' => 'text', 'format' => 'basic', 'locale' => 'hi', 'text' => $hi];
-        }
-
         return array_merge([
             'protocol'        => 1,
             'conversation_id' => $this->conversationId,
-            'blocks'          => $blocks,
+            'blocks'          => [['type' => 'text', 'format' => 'basic', 'locale' => 'en', 'text' => $en]],
             'actions'         => [],
-            'meta'            => ['source' => $source, 'input_type' => $inputType, 'category' => null],
+            'meta'            => ['source' => $source, 'input_type' => $inputType, 'category' => null, 'locale' => 'en'],
             'source'          => $source,
             'answer_en'       => $en,
             'answer_hi'       => $hi,
@@ -149,7 +151,7 @@ class HelpEndpointTest extends TestCase
     {
         $response = $this->ask('hello')->assertOk();
 
-        $response->assertExactJson($this->reply('greeting', 'greeting', 'Hello. Please state the issue you are facing.', null));
+        $response->assertExactJson($this->reply('greeting', 'greeting', 'Hi! What can I help you with today?', 'नमस्ते! बताइए, मैं आपकी क्या मदद कर सकती हूँ?'));
         $this->assertSame(Conversation::sole()->id, $response->json('conversation_id'));
 
         $this->assertNoTextStored();
@@ -159,15 +161,15 @@ class HelpEndpointTest extends TestCase
     {
         $this->ask('test')->assertOk()->assertJson([
             'source' => 'noise', 'input_type' => 'noise',
-            'answer_en' => 'I am ready to help. Please state your issue.',
+            'answer_en' => "Sorry, I didn't catch that. Could you describe the problem?",
         ]);
         $this->ask('help me')->assertOk()->assertJson([
             'source' => 'vague', 'input_type' => 'vague',
-            'answer_en' => 'Please specify the error message or the service (e.g., AEPS, PAN) you are having trouble with.',
+            'answer_en' => 'Could you tell me a bit more? For example, the service (AEPS, PAN, recharge…) and the exact message you see.',
         ]);
         $this->ask('fuck this')->assertOk()->assertJson([
             'source' => 'abuse_severe', 'input_type' => 'abuse_severe',
-            'answer_en' => 'Support is available for technical issues. Please keep the conversation respectful.',
+            'answer_en' => "I'm here to help with technical issues. Please keep the conversation respectful.",
         ]);
 
         $this->assertNoTextStored();
@@ -195,7 +197,7 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('hello')
             ->assertOk()
-            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null, ['actions' => [self::ESCALATE_ACTION]]));
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_EN, self::EXIT_HI, ['actions' => [self::ESCALATE_ACTION]]));
 
         // The canned-reply guard is not cleared on exit, so it keeps exiting.
         $this->ask('hello')->assertJson(['source' => 'exit']);
@@ -229,8 +231,8 @@ class HelpEndpointTest extends TestCase
             ->assertExactJson($this->reply(
                 'escalation',
                 'escalation_request',
-                "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance.",
-                "आपका अनुरोध दर्ज किया गया है। कृपया 'टिकट बनाएं' विकल्प का उपयोग करें या तुरंत सहायता के लिए हमारी हेल्पलाइन पर कॉल करें।",
+                'Sure, I can pass this to our support team. Use the button below to raise a ticket, or call our helpline for urgent help.',
+                'ज़रूर, मैं इसे हमारी सपोर्ट टीम तक पहुँचा सकती हूँ। टिकट बनाने के लिए नीचे दिया बटन दबाइए, या तुरंत मदद के लिए हमारी हेल्पलाइन पर कॉल करें।',
                 ['actions' => [self::ESCALATE_ACTION]],
             ));
 
@@ -250,7 +252,7 @@ class HelpEndpointTest extends TestCase
     // Knowledge base hit
     // ---------------------------------------------------------------------
 
-    public function test_kb_hit_with_category_returns_prefixed_answer_and_persists_conversation(): void
+    public function test_kb_hit_with_category_returns_the_answer_as_written_and_persists_conversation(): void
     {
         $definition = $this->seedDefinition();
 
@@ -258,11 +260,11 @@ class HelpEndpointTest extends TestCase
             ->assertOk();
 
         $conversation = Conversation::sole();
-        $expectedEn = "I understand you are facing a **AEPS** issue.\n\nClean the scanner and retry the capture.";
+        $expectedEn = 'Clean the scanner and retry the capture.';
 
         $this->assertSame($conversation->id, $this->conversationId);
         $response->assertExactJson($this->reply('kb', 'valid', $expectedEn, 'स्कैनर साफ करें और फिर से प्रयास करें।', [
-            'meta'     => ['source' => 'kb', 'input_type' => 'valid', 'category' => 'AEPS'],
+            'meta'     => ['source' => 'kb', 'input_type' => 'valid', 'category' => 'AEPS', 'locale' => 'en'],
             'category' => 'AEPS',
         ]));
 
@@ -289,8 +291,10 @@ class HelpEndpointTest extends TestCase
         ], $messages[0]->data);
 
         $this->assertSame('ai', $messages[1]->sender_type);
-        $this->assertSame($expectedEn . "\nस्कैनर साफ करें और फिर से प्रयास करें।", $messages[1]->message);
+        // The answer as shown, in the reply language
+        $this->assertSame($expectedEn, $messages[1]->message);
         $this->assertEquals([
+            'locale'           => 'en',
             'source'           => 'kb',
             'input_type'       => 'valid',
             'category'         => 'AEPS',
@@ -307,7 +311,7 @@ class HelpEndpointTest extends TestCase
             ->assertJson([
                 'source'    => 'kb',
                 'answer_en' => 'Request a new OTP.',
-                'answer_hi' => '',
+                'answer_hi' => null,
                 'category'  => null,
             ]);
     }
@@ -407,9 +411,9 @@ class HelpEndpointTest extends TestCase
     {
         $response = $this->ask('aeps withdrawal failed')->assertOk();
 
-        $response->assertExactJson($this->reply('unknown', 'valid', 'I understand you are facing a **AEPS** issue, but ' . self::UNKNOWN_EN, self::UNKNOWN_HI, [
+        $response->assertExactJson($this->reply('unknown', 'valid', self::UNKNOWN_AEPS_EN, self::UNKNOWN_AEPS_HI, [
             'actions'  => [self::ESCALATE_ACTION],
-            'meta'     => ['source' => 'unknown', 'input_type' => 'valid', 'category' => 'AEPS'],
+            'meta'     => ['source' => 'unknown', 'input_type' => 'valid', 'category' => 'AEPS', 'locale' => 'en'],
             'category' => 'AEPS',
         ]));
 
@@ -419,7 +423,7 @@ class HelpEndpointTest extends TestCase
         $this->assertNull(Message::where('sender_type', 'ai')->sole()->data['matched_error_id']);
     }
 
-    public function test_kb_miss_without_category_has_no_prefix(): void
+    public function test_kb_miss_without_category_names_no_category(): void
     {
         $this->ask('money deducted but transaction failed')
             ->assertJson([
@@ -441,7 +445,7 @@ class HelpEndpointTest extends TestCase
 
         $this->ask('capture timeout')
             ->assertOk()
-            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_MESSAGE, null, ['actions' => [self::ESCALATE_ACTION]]));
+            ->assertExactJson($this->reply('exit', 'loop_exit', self::EXIT_EN, self::EXIT_HI, ['actions' => [self::ESCALATE_ACTION]]));
 
         // The hash is forgotten on exit, so the third identical request is answered again.
         $this->ask('capture timeout')->assertJson(['source' => 'kb']);

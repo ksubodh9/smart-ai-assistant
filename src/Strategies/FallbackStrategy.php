@@ -20,15 +20,14 @@ class FallbackStrategy implements ResolutionStrategy
 
     public function resolve(StructuredProblem $problem, ConversationContext $context): ?Resolution
     {
-        $unknown = $this->responses->answers('unknown');
+        $category = $problem->domains[0] ?? null;
 
         return new Resolution(
             outcome: Resolution::UNRESOLVED,
             source: 'unknown',
-            answers: [
-                'en' => $this->responses->prefix('unknown_prefix', $problem->domains[0] ?? null) . $unknown['en'],
-                'hi' => $unknown['hi'],
-            ],
+            answers: $category !== null
+                ? $this->responses->answers('unknown_category', [':category' => $category])
+                : $this->responses->answers('unknown'),
             persist: true,
             provenance: ['strategy' => 'fallback', 'knowledge_id' => null],
         );

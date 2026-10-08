@@ -143,8 +143,32 @@ return [
     ],
 
     // Reply texts; a key listed here replaces its default
-    // (see ResponseCatalog::DEFAULTS). Answers are ['en' => ..., 'hi' => ...].
+    // (see ResponseCatalog::DEFAULTS). Each key holds a text per language
+    // code from 'locales' below, e.g. ['en' => ..., 'hi' => ...].
     'responses' => [],
+
+    // Reply languages. Every reply is shown in one language: the one picked
+    // in the widget's language menu (shown with 2+ languages), else the
+    // language the message is written in, else the one used earlier in the
+    // conversation, else 'default'. Knowledge base answers use the codes
+    // 'en' (answer_en) and 'hi' (answer_hi).
+    'locales' => [
+        'default' => 'en',
+
+        // Language code => settings:
+        //   label:    name in the language menu
+        //   script:   Unicode script (e.g. 'Devanagari'); a message written
+        //             mostly in it is in this language
+        //   patterns: regexes (use /iu) for words that mark the language in
+        //             Latin letters, e.g. romanised Hindi; one match is enough
+        //   fallback: language shown when a text has no translation in this
+        //             one (default: 'default')
+        // A language with neither script nor patterns takes messages of 3+
+        // words that match no other language.
+        'available' => [
+            'en' => ['label' => 'English'],
+        ],
+    ],
 
     // The chat widget. Each section you set replaces only the keys you list;
     // missing keys keep their defaults (see Support\WidgetConfig::DEFAULTS).

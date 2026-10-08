@@ -78,14 +78,14 @@ class InputClassifierTest extends TestCase
 
             // Keywords match whole words only, with an optional plural "s"
             'device has no category'     => ['my device is not detected', 'valid', null, true, false],
-            'RD service has no category' => ['Error 1001: RD service not running', 'valid', null, true, false],
-            'company has no category'    => ['company name mismatch', 'valid', null, true, false],
+            'RD service is a device issue' => ['Error 1001: RD service not running', 'valid', 'DEVICE', true, false],
+            'company is not pan'         => ['company name is wrong', 'valid', null, true, false],
             'video is not vi'            => ['video kyc not opening', 'valid', 'KYC', true, false],
             'plural keyword'             => ['two recharges failed', 'valid', 'RECHARGE', true, false],
             'keyword in punctuation'     => ['status (aeps)?', 'valid', 'AEPS', true, false],
             'uppercase vi'               => ['VI recharge failed', 'valid', 'RECHARGE', true, false],
-            // KNOWN BUG: "ticket" is an IRCTC keyword, so support-ticket questions are tagged IRCTC.
-            'raise ticket -> IRCTC (known bug)' => ['how to raise ticket', 'valid', 'IRCTC', true, false],
+            // Was a known bug: "ticket" was an IRCTC keyword, so support-ticket questions were tagged IRCTC
+            'raise ticket has no category' => ['how to raise ticket', 'valid', null, true, false],
 
             // Devanagari is text, not noise (Unicode-aware patterns)
             'hindi sentence'             => ['पैसा कट गया लेकिन ट्रांजैक्शन फेल', 'valid', null, true, false],
@@ -155,6 +155,26 @@ class InputClassifierTest extends TestCase
 
         $this->assertSame('CARDS', $classifier->classify('card payment failed')['category']);
         $this->assertSame('PAYMENTS', $classifier->classify('two payments failed')['category']);
+    }
+
+    public function test_escalation_requests_and_vague_input_keep_their_category(): void
+    {
+        $classifier = new InputClassifier(
+            ['vague' => ['/^(card|refund)\s*(issue)?$/iu']],
+            ['CARDS' => ['card'], 'PAYMENTS' => ['refund']],
+        );
+
+        // The category goes with the ticket, and tells a later clarify step what to ask about
+        $this->assertSame(['escalation_request', 'CARDS'], array_values(array_intersect_key(
+            $classifier->classify('my card is blocked, call me back'),
+            ['type' => 1, 'category' => 1]
+        )));
+        $this->assertSame(['vague', 'PAYMENTS'], array_values(array_intersect_key(
+            $classifier->classify('refund issue'),
+            ['type' => 1, 'category' => 1]
+        )));
+        // Canned types other than vague still carry none
+        $this->assertNull($classifier->classify('hello')['category']);
     }
 
     private static function maddoxPayClassifier(): InputClassifier

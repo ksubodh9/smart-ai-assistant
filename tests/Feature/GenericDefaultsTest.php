@@ -32,20 +32,20 @@ class GenericDefaultsTest extends TestCase
     {
         $this->ask('help me')->assertJson([
             'source'    => 'vague',
-            'answer_en' => 'Please specify the error message or the service you are having trouble with.',
+            'answer_en' => 'Could you tell me a bit more? For example, what you were trying to do and the exact message you see.',
         ]);
     }
 
-    public function test_unknown_has_no_category_prefix_and_no_hindi(): void
+    public function test_unknown_has_no_category_and_no_hindi(): void
     {
-        $unknown = "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support.";
+        $unknown = "Sorry, I don't have an answer for that yet. Our support team can look into it for you.";
 
         $this->ask('aeps withdrawal failed')->assertExactJson([
             'protocol'        => 1,
             'conversation_id' => Conversation::sole()->id,
             'blocks'          => [['type' => 'text', 'format' => 'basic', 'locale' => 'en', 'text' => $unknown]],
             'actions'         => [['type' => 'action', 'id' => 'escalate', 'label' => 'Raise ticket', 'confirm' => true]],
-            'meta'            => ['source' => 'unknown', 'input_type' => 'valid', 'category' => null],
+            'meta'            => ['source' => 'unknown', 'input_type' => 'valid', 'category' => null, 'locale' => 'en'],
             'source'          => 'unknown',
             'answer_en'       => $unknown,
             'answer_hi'       => null,

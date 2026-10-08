@@ -94,8 +94,10 @@ That's it! The assistant will appear as a floating button in the bottom-right co
 - Attach files for context
 
 ### 4. AI Response
-- Returns English and Hindi solutions
-- Displays in chat bubble format
+- Replies in one language: the one picked in the header menu, or the language
+  the user wrote in (`locales` config; e.g. English, Hindi, Hinglish)
+- Displays in chat bubble format, with "Raise ticket" under replies it could
+  not answer
 - Auto-scrolls to bottom
 
 ---
@@ -147,7 +149,10 @@ domain `general`). Publish the config once
    (`smart-ai:seed-kb file.xlsx --domain=...`).
 4. `understanding.patterns` / `understanding.categories`: your language and
    product vocabulary. A pattern type you list replaces its defaults.
-5. `responses`: reply texts to change, per key, optionally with `hi`.
+5. `locales` and `responses`: your reply languages (label, Unicode `script`,
+   word `patterns` for romanised text, `fallback`), and the reply texts to
+   change, per key, with one text per language code. With more than one
+   language, the widget shows a language menu (Auto + each language).
 6. `resolution.strategies`: add your own `ResolutionStrategy` classes; keep
    `FallbackStrategy` last.
 7. `escalation.channel`: your `EscalationChannel` class that turns a support
@@ -224,11 +229,10 @@ for the same user (or guest session) and while the conversation is active.
     "protocol": 1,
     "conversation_id": 12,
     "blocks": [
-        { "type": "text", "format": "basic", "locale": "en", "text": "English solution" },
-        { "type": "text", "format": "basic", "locale": "hi", "text": "Hindi solution" }
+        { "type": "text", "format": "basic", "locale": "en", "text": "English solution" }
     ],
     "actions": [],
-    "meta": { "source": "kb", "input_type": "valid", "category": "AEPS" },
+    "meta": { "source": "kb", "input_type": "valid", "category": "AEPS", "locale": "en" },
     "source": "kb",
     "answer_en": "English solution",
     "answer_hi": "Hindi solution",
@@ -341,9 +345,16 @@ customer text: keep it out of the repository and delete it after use.
       its reference; a second one within the host's limit shows the host's
       "please wait" message; a `.docx` or a file over the size limit is refused
       with a message; the page source has no `sa-user-*` inputs
-- [ ] Replies look as before (💡 Solution / 🇮🇳 हिंदी में sections); the same
-      greeting twice, or the same error twice, gets the exit message, also
-      after navigating to another page in the same tab
+- [ ] Replies have no "Solution" / "हिंदी में" headings and show one language:
+      English for an English question, Hindi for a Devanagari one, Hinglish
+      for "mATM par device kaise register karen"; "hello" after a Hindi
+      message stays Hindi; the header menu (Auto / English / हिंदी / Hinglish)
+      overrides this and is remembered after a reload. The same greeting
+      twice, or the same error twice, gets the exit message, also after
+      navigating to another page in the same tab
+- [ ] "Raise ticket" appears inside the reply bubble (labelled in the reply
+      language), not in a separate "Still need help?" bubble; clicking it
+      adds the "This will be sent to our support team" confirmation below
 - [ ] With `resolve_typed_messages` on: a typed greeting gets a reply and no
       ticket; an unknown problem gets the reply plus a "Raise ticket" button;
       the button shows what will be sent; "Cancel" sends nothing; "Send to

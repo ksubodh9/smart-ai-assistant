@@ -7,17 +7,15 @@ use Subodh\SmartAiAssistant\Core\Contracts\ResolutionStrategy;
 use Subodh\SmartAiAssistant\Core\Data\ConversationContext;
 use Subodh\SmartAiAssistant\Core\Data\Resolution;
 use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
-use Subodh\SmartAiAssistant\Support\ResponseCatalog;
 
 /**
- * Answer a reported error from the knowledge base.
+ * Answer a reported error from the knowledge base, as written (every
+ * translation the entry has).
  */
 class KnowledgeLookupStrategy implements ResolutionStrategy
 {
-    public function __construct(
-        private readonly KnowledgeSource $knowledge,
-        private readonly ResponseCatalog $responses,
-    ) {
+    public function __construct(private readonly KnowledgeSource $knowledge)
+    {
     }
 
     public function resolve(StructuredProblem $problem, ConversationContext $context): ?Resolution
@@ -35,10 +33,7 @@ class KnowledgeLookupStrategy implements ResolutionStrategy
         return new Resolution(
             outcome: Resolution::ANSWERED,
             source: 'kb',
-            answers: [
-                'en' => $this->responses->prefix('kb_prefix', $problem->domains[0] ?? null) . $entry->content['en'],
-                'hi' => $entry->content['hi'] ?? '',
-            ],
+            answers: array_filter($entry->content, fn ($text) => $text !== null && $text !== ''),
             persist: true,
             provenance: ['strategy' => 'knowledge_lookup', 'knowledge_id' => $entry->id],
         );

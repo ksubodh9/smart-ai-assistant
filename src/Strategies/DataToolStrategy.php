@@ -118,7 +118,7 @@ class DataToolStrategy implements ResolutionStrategy
         return new Resolution(
             outcome: Resolution::ANSWERED,
             source: 'data_tool',
-            answers: ['en' => $this->plainText($result), 'hi' => null],
+            answers: [$context->locale => $this->plainText($result)],
             persist: true,
             provenance: $provenance,
             blocks: $blocks,

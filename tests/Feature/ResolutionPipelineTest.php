@@ -115,7 +115,11 @@ class ResolutionPipelineTest extends TestCase
         );
 
         $this->assertSame(Resolution::CLARIFY, $resolution->outcome);
-        $this->assertSame(['en' => 'Please type your issue message.', 'hi' => null], $resolution->answers);
+        $this->assertSame([
+            'en'      => 'Please type your question.',
+            'hi'      => 'कृपया अपना सवाल लिखिए।',
+            'hi-Latn' => 'Kripya apna sawaal likhiye.',
+        ], $resolution->answers);
     }
 
     public function test_host_responses_override_single_keys(): void
@@ -123,7 +127,7 @@ class ResolutionPipelineTest extends TestCase
         config(['smart-ai-assistant.responses.greeting' => ['en' => 'Hi! What went wrong?', 'hi' => 'नमस्ते!']]);
 
         $this->ask('hello')->assertJson(['answer_en' => 'Hi! What went wrong?', 'answer_hi' => 'नमस्ते!']);
-        $this->ask('test')->assertJson(['answer_en' => 'I am ready to help. Please state your issue.']);
+        $this->ask('test')->assertJson(['answer_en' => "Sorry, I didn't catch that. Could you describe the problem?"]);
     }
 }
 

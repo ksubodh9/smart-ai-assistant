@@ -6,12 +6,14 @@ use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
 use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
 use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
 use Subodh\SmartAiAssistant\Support\InputClassifier;
+use Subodh\SmartAiAssistant\Support\Locales;
 
 /**
  * Interpreter backed by the deterministic InputClassifier.
  *
  * The classifier's type is kept in signals['input_type'] because it is still
- * part of the wire format and the stored conversation data.
+ * part of the wire format and the stored conversation data. signals['language']
+ * is the language the message is written in (null when it cannot be told).
  */
 class RuleBasedInterpreter implements Interpreter
 {
@@ -33,6 +35,7 @@ class RuleBasedInterpreter implements Interpreter
     public function __construct(
         private readonly InputClassifier $classifier,
         private readonly array $entityPatterns = [],
+        private readonly ?Locales $locales = null,
     ) {
     }
 
@@ -52,6 +55,7 @@ class RuleBasedInterpreter implements Interpreter
                     InputClassifier::TYPE_ABUSE_MILD   => 'mild',
                     default                            => 'none',
                 },
+                'language'    => $this->locales?->detect($message->text),
             ],
         );
     }

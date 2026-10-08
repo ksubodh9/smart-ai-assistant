@@ -11,6 +11,7 @@ use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Data\EscalationRequest;
 use Subodh\SmartAiAssistant\Core\Data\EscalationResult;
 use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
+use Subodh\SmartAiAssistant\Support\Locales;
 use Subodh\SmartAiAssistant\Support\ResponseCatalog;
 
 class EscalationController extends Controller
@@ -42,13 +43,14 @@ class EscalationController extends Controller
         EscalationChannel $channel,
         ConversationStore $conversations,
         ResponseCatalog $responses,
+        Locales $locales,
     ) {
         $user = $users->resolve($request);
 
         if (! $user->isAuthenticated()) {
             return response()->json([
                 'status'  => EscalationResult::REJECTED,
-                'message' => $responses->answers('escalation_login_required')['en'],
+                'message' => $locales->pick($responses->answers('escalation_login_required'), $locales->default())['text'] ?? '',
             ], 401);
         }
 

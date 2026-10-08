@@ -4,12 +4,13 @@ namespace Subodh\SmartAiAssistant\Http;
 
 use Subodh\SmartAiAssistant\Core\Data\Resolution;
 use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
+use Subodh\SmartAiAssistant\Support\Locales;
 use Subodh\SmartAiAssistant\Support\ResponseCatalog;
 
 /**
  * The /help wire format (protocol 1, PLATFORM_PLAN.md section 6.1):
  *
- *   {protocol, conversation_id, blocks[], actions[], meta{source, input_type, category}}
+ *   {protocol, conversation_id, blocks[], actions[], meta{source, input_type, category, locale}}
  *
  * plus the legacy fields {source, answer_en, answer_hi, input_type, category?}
  * for widgets released before blocks; "category" there is only present for
@@ -26,11 +27,16 @@ class ResponseSerializer
      */
     private const ESCALATE_AFTER = [Resolution::UNRESOLVED, Resolution::ESCALATE, Resolution::EXIT];
 
-    public function __construct(private readonly ResponseCatalog $responses)
-    {
+    public function __construct(
+        private readonly ResponseCatalog $responses,
+        private readonly Locales $locales,
+    ) {
     }
 
-    public function toArray(Resolution $resolution, StructuredProblem $problem, int $conversationId): array
+    /**
+     * @param  string  $locale  The reply language (see Support\Locales::choose)
+     */
+    public function toArray(Resolution $resolution, StructuredProblem $problem, int $conversationId, string $locale): array
     {
         $inputType = $resolution->outcome === Resolution::EXIT
             ? 'loop_exit'
@@ -39,17 +45,18 @@ class ResponseSerializer
         $data = [
             'protocol'        => self::PROTOCOL,
             'conversation_id' => $conversationId,
-            'blocks'          => $this->blocks($resolution),
-            'actions'         => $this->actions($resolution),
+            'blocks'          => $this->blocks($resolution, $locale),
+            'actions'         => $this->actions($resolution, $locale),
             'meta'            => [
                 'source'     => $resolution->source,
                 'input_type' => $inputType,
                 'category'   => $problem->domains[0] ?? null,
+                'locale'     => $locale,
             ],
             // Legacy fields
             'source'          => $resolution->source,
-            'answer_en'       => $resolution->answers['en'],
-            'answer_hi'       => $resolution->answers['hi'],
+            'answer_en'       => $resolution->answers['en'] ?? $this->locales->pick($resolution->answers, $locale)['text'] ?? '',
+            'answer_hi'       => $resolution->answers['hi'] ?? null,
             'input_type'      => $inputType,
         ];
 
@@ -61,27 +68,24 @@ class ResponseSerializer
     }
 
     /**
-     * One text block per answer language. "basic" format allows **bold** and
-     * line breaks only; the widget renders it as text, never as HTML.
+     * One text block in the reply language (or the language it falls back
+     * to, named in the block). "basic" format allows **bold** and line breaks
+     * only; the widget renders it as text, never as HTML.
      */
-    private function blocks(Resolution $resolution): array
+    private function blocks(Resolution $resolution, string $locale): array
     {
         if ($resolution->blocks !== []) {
             return $resolution->blocks;
         }
 
-        $blocks = [];
+        $answer = $this->locales->pick($resolution->answers, $locale);
 
-        foreach ($resolution->answers as $locale => $text) {
-            if ($text !== null && $text !== '') {
-                $blocks[] = ['type' => 'text', 'format' => 'basic', 'locale' => $locale, 'text' => $text];
-            }
-        }
-
-        return $blocks;
+        return $answer === null
+            ? []
+            : [['type' => 'text', 'format' => 'basic', 'locale' => $answer['locale'], 'text' => $answer['text']]];
     }
 
-    private function actions(Resolution $resolution): array
+    private function actions(Resolution $resolution, string $locale): array
     {
         if (!in_array($resolution->outcome, self::ESCALATE_AFTER, true)
             || !config('smart-ai-assistant.capabilities.escalation', true)) {
@@ -91,7 +95,7 @@ class ResponseSerializer
         return [[
             'type'    => 'action',
             'id'      => 'escalate',
-            'label'   => $this->responses->answers('escalate_action')['en'],
+            'label'   => $this->locales->pick($this->responses->answers('escalate_action'), $locale)['text'] ?? 'Raise ticket',
             'confirm' => true,
         ]];
     }

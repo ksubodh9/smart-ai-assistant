@@ -13,6 +13,8 @@
     $saServerEscalation = (bool) config('smart-ai-assistant.features.server_escalation');
     $saResolveTyped = (bool) config('smart-ai-assistant.features.resolve_typed_messages');
     $saAttachmentTypes = config('smart-ai-assistant.escalation.attachments.mimes', ['jpg', 'jpeg', 'png', 'pdf']);
+    // Reply languages; the menu is only shown when there is a choice
+    $saLocales = \Subodh\SmartAiAssistant\Support\Locales::fromConfig()->forScript();
     // Read by the widget scripts; holds no personal data
     $saConfig = [
         'endpoints' => [
@@ -24,7 +26,8 @@
             'server_escalation'      => $saServerEscalation,
             'resolve_typed_messages' => $saResolveTyped,
         ],
-        'widget' => $saWidget->forScript(),
+        'widget'  => $saWidget->forScript(),
+        'locales' => $saLocales,
     ];
 @endphp
 <script type="application/json" id="sa-config">@json($saConfig)</script>
@@ -45,7 +48,18 @@
                 <span class="sa-header-icon">{{ $saWidget->branding('icon') }}</span>
                 <span>{{ $saWidget->branding('title') }}</span>
             </div>
-            <button id="smart-assistant-close" aria-label="Close Assistant"><span aria-hidden="true">&times;</span></button>
+            <div class="sa-header-actions">
+                @if(count($saLocales) > 1)
+                {{-- Reply language: Auto follows the language each message is written in --}}
+                <select id="sa-locale" class="sa-locale-select" aria-label="Reply language" title="Reply language">
+                    <option value="auto">Auto</option>
+                    @foreach($saLocales as $saLocale)
+                        <option value="{{ $saLocale['code'] }}">{{ $saLocale['label'] }}</option>
+                    @endforeach
+                </select>
+                @endif
+                <button id="smart-assistant-close" aria-label="Close Assistant"><span aria-hidden="true">&times;</span></button>
+            </div>
         </div>
 
         <!-- Content Area -->

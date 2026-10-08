@@ -21,7 +21,7 @@ class DataToolTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const NOT_FOUND = "I couldn't find that reference in your account. Please check the number, or raise a ticket.";
+    private const NOT_FOUND = "I couldn't find that reference in your account. Please check the number and try again.";
 
     protected function setUp(): void
     {
@@ -112,7 +112,7 @@ class DataToolTest extends TestCase
         $this->send('status TXN000001')
             ->assertOk()
             ->assertJson([
-                'answer_en' => "I couldn't check that right now. Please try again in a few minutes, or raise a ticket.",
+                'answer_en' => "I couldn't check that right now. Please try again in a few minutes.",
                 'actions'   => [['id' => 'escalate']],
             ])
             ->assertDontSee('database exploded');

@@ -46,7 +46,7 @@ class KeywordKnowledgeTest extends TestCase
         $this->keywordEntry('pan refund', 'PAN refund guidance.');
 
         $this->ask('Pan card apply kiya, pese refnd nahi huye')
-            ->assertJson(['meta' => ['source' => 'kb', 'category' => 'PAN'], 'blocks' => [['text' => "I understand you are facing a **PAN** issue.\n\nPAN refund guidance."]]]);
+            ->assertJson(['meta' => ['source' => 'kb', 'category' => 'PAN'], 'blocks' => [['text' => 'PAN refund guidance.']]]);
         $this->ask('refund for my PAN application')->assertJson(['meta' => ['source' => 'kb']]);
     }
 
@@ -95,8 +95,8 @@ class KeywordKnowledgeTest extends TestCase
         $this->keywordEntry('refund', 'General refund guidance.');
         $this->keywordEntry('pan refund not', 'PAN refund not received.');
 
-        $this->ask('pan ka paisa wapas nahi aaya')->assertJson(['answer_en' => "I understand you are facing a **PAN** issue.\n\nPAN refund not received."]);
-        $this->ask('recharge refund')->assertJson(['answer_en' => "I understand you are facing a **RECHARGE** issue.\n\nGeneral refund guidance."]);
+        $this->ask('pan ka paisa wapas nahi aaya')->assertJson(['answer_en' => 'PAN refund not received.']);
+        $this->ask('recharge refund')->assertJson(['answer_en' => 'General refund guidance.']);
     }
 
     public function test_entry_words_may_be_written_as_variants_too(): void

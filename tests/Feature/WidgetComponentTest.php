@@ -212,6 +212,38 @@ class WidgetComponentTest extends TestCase
         }
     }
 
+    public function test_language_menu_lists_the_configured_languages(): void
+    {
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertSee('id="sa-locale"', false)
+            ->assertSeeInOrder(['<option value="auto">Auto</option>', 'English', 'हिंदी', 'Hinglish'], false);
+
+        $this->assertSame([
+            ['code' => 'en', 'label' => 'English'],
+            ['code' => 'hi', 'label' => 'हिंदी'],
+            ['code' => 'hi-Latn', 'label' => 'Hinglish'],
+        ], $this->scriptConfig()['locales']);
+    }
+
+    public function test_no_language_menu_with_a_single_language(): void
+    {
+        config(['smart-ai-assistant.locales' => ['available' => ['en' => ['label' => 'English']]]]);
+
+        $this->blade('<x-smart-assistant-widget />')->assertDontSee('id="sa-locale"', false);
+    }
+
+    public function test_language_labels_are_escaped(): void
+    {
+        config(['smart-ai-assistant.locales' => ['available' => [
+            'en' => ['label' => 'English'],
+            'xx' => ['label' => '<b>X</b>'],
+        ]]]);
+
+        $this->blade('<x-smart-assistant-widget />')
+            ->assertDontSee('<b>X</b>', false)
+            ->assertSee('&lt;b&gt;X&lt;/b&gt;', false);
+    }
+
     public function test_bundled_html2canvas_file_ships_with_the_package_assets(): void
     {
         $file = __DIR__ . '/../../public/js/vendor/html2canvas.min.js';

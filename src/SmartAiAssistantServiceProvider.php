@@ -23,6 +23,7 @@ use Subodh\SmartAiAssistant\Resolution\StrategyRegistry;
 use Subodh\SmartAiAssistant\Support\DefaultRedactor;
 use Subodh\SmartAiAssistant\Support\InputClassifier;
 use Subodh\SmartAiAssistant\Support\LaravelAuthUserContextResolver;
+use Subodh\SmartAiAssistant\Support\Locales;
 use Subodh\SmartAiAssistant\Support\ResponseCatalog;
 use Subodh\SmartAiAssistant\Understanding\RuleBasedInterpreter;
 
@@ -104,6 +105,9 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             );
         });
 
+        // Reply languages: how a message's language is told and which translation is shown
+        $this->app->bind(Locales::class, fn () => Locales::fromConfig());
+
         $this->app->bind(ResponseCatalog::class, function () {
             return new ResponseCatalog(config('smart-ai-assistant.responses', []));
         });
@@ -112,6 +116,7 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             return new RuleBasedInterpreter(
                 $app->make(InputClassifier::class),
                 (array) config('smart-ai-assistant.understanding.entities', []),
+                $app->make(Locales::class),
             );
         });
 
@@ -142,6 +147,7 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
                 $app->make(Redactor::class),
                 config('smart-ai-assistant.default_service', 'general'),
                 (int) config('smart-ai-assistant.conversations.idle_minutes', 120),
+                $app->make(Locales::class),
             );
         });
 

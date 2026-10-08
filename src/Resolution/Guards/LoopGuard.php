@@ -27,7 +27,7 @@ class LoopGuard implements ResolutionGuard
             return $resolution;
         }
 
-        $hash = md5($resolution->answers['en']);
+        $hash = md5(json_encode($resolution->answers));
 
         if ($context->state->get(self::STATE_KEY) === $hash) {
             $context->state->forget(self::STATE_KEY);

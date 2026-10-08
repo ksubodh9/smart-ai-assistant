@@ -16,7 +16,8 @@ final class Resolution
 
     /**
      * @param  string  $source  Wire-format source, e.g. 'kb', 'unknown', 'greeting'
-     * @param  array{en: string, hi: ?string}  $answers
+     * @param  array<string, string|null>  $answers  Text per language code, e.g. ['en' => '...', 'hi' => '...'];
+     *         the reply shows one of them (see Support\Locales::pick)
      * @param  bool  $persist  Whether the exchange is stored as a conversation
      * @param  array<string, mixed>  $provenance  e.g. ['strategy' => 'knowledge_lookup', 'knowledge_id' => 7]
      * @param  list<array<string, mixed>>  $blocks  Wire-format blocks (e.g. key_value); when set they

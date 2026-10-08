@@ -78,10 +78,12 @@ All user input is classified before processing. Classification is **deterministi
 
 | Do | Don't |
 |----|-------|
-| Keep responses short and professional | Use jokes or casual tone |
+| Keep responses short, warm and professional | Use jokes, slang or emoji |
 | Provide actionable steps | Expose internal system details |
 | Use bullet points for clarity | Mention AI, models, or training |
-| Support both English and Hindi | Use overly technical jargon |
+| Reply in one language: the user's choice, else the language they wrote in | Show every translation of an answer at once |
+| Write like a person ("Sorry, I don't have an answer for that yet") | Label replies ("Solution:") or call every question an "error" |
+| Offer "Raise ticket" as a button under the reply | Also tell the user in the text to use the button |
 
 ---
 

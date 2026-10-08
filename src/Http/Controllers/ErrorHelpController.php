@@ -19,6 +19,7 @@ class ErrorHelpController extends Controller
      *   - page_url (string, optional)
      *   - conversation_id (int, optional): from the previous response; only
      *     honoured for the same user (or guest session)
+     *   - locale (string, optional): as for /message
      *
      * The responder is method-injected, not constructor-injected: the router
      * reuses controller instances, and it depends on per-request config.
@@ -29,6 +30,7 @@ class ErrorHelpController extends Controller
             'error_text'      => 'required|string|max:1000',
             'page_url'        => 'nullable|string|max:2048',
             'conversation_id' => 'nullable|integer',
+            'locale'          => 'nullable|string|max:20',
         ]);
 
         return response()->json($responder->respond(
@@ -37,6 +39,7 @@ class ErrorHelpController extends Controller
             IncomingMessage::SOURCE_PAGE_ERROR,
             $validated['page_url'] ?? null,
             isset($validated['conversation_id']) ? (int) $validated['conversation_id'] : null,
+            $validated['locale'] ?? null,
         ));
     }
 }

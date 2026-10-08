@@ -40,6 +40,30 @@ class APIManager {
         }
     }
 
+    /**
+     * The reply language picked in the widget's menu, kept per browser:
+     * 'auto' (follow the language of each message) or a configured code.
+     */
+    getLocale() {
+        const codes = (this.readConfig().locales || []).map(locale => locale.code);
+        let locale = this.locale || null;
+        try {
+            locale = localStorage.getItem('smart-assistant:locale') || locale;
+        } catch (e) {
+            // Storage blocked: the in-memory copy still covers this page
+        }
+        return codes.includes(locale) ? locale : 'auto';
+    }
+
+    setLocale(locale) {
+        this.locale = locale;
+        try {
+            localStorage.setItem('smart-assistant:locale', locale);
+        } catch (e) {
+            // Storage blocked: the in-memory copy still covers this page
+        }
+    }
+
     readConfig() {
         // Parsed once by ui-manager.js, which loads first
         return window.SmartAssistantConfig || {};
@@ -56,7 +80,8 @@ class APIManager {
         return this.postToAssistant(this.endpoints.help, {
             error_text: errorText,
             page_url: pageUrl || window.location.href,
-            conversation_id: this.getConversationId()
+            conversation_id: this.getConversationId(),
+            locale: this.getLocale()
         });
     }
 
@@ -70,7 +95,8 @@ class APIManager {
             text: text,
             source: source,
             page_url: pageUrl || window.location.href,
-            conversation_id: this.getConversationId()
+            conversation_id: this.getConversationId(),
+            locale: this.getLocale()
         });
     }
 

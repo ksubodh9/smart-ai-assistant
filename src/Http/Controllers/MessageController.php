@@ -27,6 +27,8 @@ class MessageController extends Controller
      *   - page_url (string, optional)
      *   - conversation_id (int, optional): from the previous response; only
      *     honoured for the same user (or guest session)
+     *   - locale (string, optional): the reply language picked in the widget;
+     *     'auto', missing or unknown codes follow the language of the message
      */
     public function store(Request $request, MessageResponder $responder)
     {
@@ -35,6 +37,7 @@ class MessageController extends Controller
             'source'          => 'nullable|in:' . implode(',', self::SOURCES),
             'page_url'        => 'nullable|string|max:2048',
             'conversation_id' => 'nullable|integer',
+            'locale'          => 'nullable|string|max:20',
         ]);
 
         return response()->json($responder->respond(
@@ -43,6 +46,7 @@ class MessageController extends Controller
             $validated['source'] ?? IncomingMessage::SOURCE_TYPED,
             $validated['page_url'] ?? null,
             isset($validated['conversation_id']) ? (int) $validated['conversation_id'] : null,
+            $validated['locale'] ?? null,
         ));
     }
 }

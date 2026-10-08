@@ -13,6 +13,7 @@ use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
 use Subodh\SmartAiAssistant\Core\Data\UserContext;
 use Subodh\SmartAiAssistant\Models\Conversation;
 use Subodh\SmartAiAssistant\Models\Message;
+use Subodh\SmartAiAssistant\Support\Locales;
 
 /**
  * Conversations in smart_ai_conversations, exchanges in smart_ai_messages.
@@ -40,6 +41,7 @@ class EloquentConversationStore implements ConversationStore
         private readonly Redactor $redactor,
         private readonly string $service,
         private readonly int $idleMinutes = 120,
+        private readonly Locales $locales = new Locales(),
     ) {
     }
 
@@ -85,11 +87,15 @@ class EloquentConversationStore implements ConversationStore
             ],
         ]);
 
+        // The answer as the user saw it, in the reply language
+        $answer = $this->locales->pick($resolution->answers, $context->locale);
+
         Message::create([
             'conversation_id' => $conversation->id,
             'sender_type'     => 'ai',
-            'message'         => $resolution->answers['en'] . "\n" . $resolution->answers['hi'],
+            'message'         => $answer['text'] ?? '',
             'data'            => [
+                'locale'           => $answer['locale'] ?? $context->locale,
                 'source'           => $resolution->source,
                 'input_type'       => $inputType,
                 'category'         => $category,

@@ -5,22 +5,22 @@ namespace Subodh\SmartAiAssistant\Support;
 /**
  * The assistant's fixed reply texts.
  *
- * Each key maps to an answer per locale; hosts override single keys through
- * config('smart-ai-assistant.responses'). Prefixes are English-only strings
- * with a :category placeholder.
+ * Each key maps to its text per language code (['en' => ..., 'hi' => ...]);
+ * hosts override single keys through config('smart-ai-assistant.responses').
+ * A language without a text falls back as described in Support\Locales.
  */
 class ResponseCatalog
 {
     public const DEFAULTS = [
         // Canned replies per input type (not stored)
-        'empty'        => ['en' => 'Please type your issue message.'],
-        'noise'        => ['en' => 'I am ready to help. Please state your issue.'],
-        'greeting'     => ['en' => 'Hello. Please state the issue you are facing.'],
-        'vague'        => ['en' => 'Please specify the error message or the service you are having trouble with.'],
-        'abuse_severe' => ['en' => 'Support is available for technical issues. Please keep the conversation respectful.'],
+        'empty'        => ['en' => 'Please type your question.'],
+        'noise'        => ['en' => "Sorry, I didn't catch that. Could you describe the problem?"],
+        'greeting'     => ['en' => 'Hi! What can I help you with today?'],
+        'vague'        => ['en' => 'Could you tell me a bit more? For example, what you were trying to do and the exact message you see.'],
+        'abuse_severe' => ['en' => "I'm here to help with technical issues. Please keep the conversation respectful."],
 
-        // The user asked for a human
-        'escalation'   => ['en' => "Your request has been noted. Please use the 'Raise Ticket' option to connect with our support team, or call our helpline for immediate assistance."],
+        // The user asked for a human (the reply carries the "raise a ticket" action)
+        'escalation'   => ['en' => 'Sure, I can pass this to our support team. Use the button below to raise a ticket.'],
 
         // Label of the "raise a ticket" action offered with unresolved replies
         'escalate_action' => ['en' => 'Raise ticket'],
@@ -29,20 +29,17 @@ class ResponseCatalog
         'escalation_login_required' => ['en' => 'Please log in to contact support.'],
 
         // A data tool found nothing the user may see (or the user may not see it)
-        'tool_not_found' => ['en' => "I couldn't find that reference in your account. Please check the number, or raise a ticket."],
+        'tool_not_found' => ['en' => "I couldn't find that reference in your account. Please check the number and try again."],
 
         // A data tool failed
-        'tool_failed' => ['en' => "I couldn't check that right now. Please try again in a few minutes, or raise a ticket."],
+        'tool_failed' => ['en' => "I couldn't check that right now. Please try again in a few minutes."],
 
-        // No knowledge matched
-        'unknown'      => ['en' => "this specific error is not yet documented.\n\nIf this issue is urgent, please use the 'Raise Ticket' option to contact support."],
+        // No knowledge matched; unknown_category when a category was detected (:category)
+        'unknown'          => ['en' => "Sorry, I don't have an answer for that yet. Our support team can look into it for you."],
+        'unknown_category' => ['en' => "Sorry, I don't have an answer for this **:category** query yet. Our support team can look into it for you."],
 
         // The same guidance would be repeated
-        'loop_exit'    => ['en' => "I've shared all available guidance for this issue.\nPlease contact support if further assistance is required."],
-
-        // Prepended to the English answer when a category was detected
-        'kb_prefix'      => "I understand you are facing a **:category** issue.\n\n",
-        'unknown_prefix' => 'I understand you are facing a **:category** issue, but ',
+        'loop_exit'    => ['en' => "I've shared everything I have on this. Our support team can take it from here."],
     ];
 
     private array $responses;
@@ -53,20 +50,19 @@ class ResponseCatalog
     }
 
     /**
-     * @return array{en: string, hi: ?string}
+     * @param  array<string, string>  $replace  Placeholder => value, e.g. [':category' => 'PAYMENTS']
+     * @return array<string, string> Text per language code
      */
-    public function answers(string $key): array
+    public function answers(string $key, array $replace = []): array
     {
-        $answers = $this->responses[$key];
+        $answers = [];
 
-        return ['en' => $answers['en'], 'hi' => $answers['hi'] ?? null];
-    }
+        foreach ((array) $this->responses[$key] as $locale => $text) {
+            if (is_string($locale) && $text !== null && $text !== '') {
+                $answers[$locale] = strtr((string) $text, $replace);
+            }
+        }
 
-    /**
-     * The prefix for a detected category, or '' when there is none.
-     */
-    public function prefix(string $key, ?string $category): string
-    {
-        return $category !== null ? strtr($this->responses[$key], [':category' => $category]) : '';
+        return $answers;
     }
 }

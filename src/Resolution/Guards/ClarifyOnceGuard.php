@@ -29,7 +29,8 @@ class ClarifyOnceGuard implements ResolutionGuard
             return $resolution;
         }
 
-        $reply = $resolution->answers['en'];
+        // All translations together, so the check does not depend on one language
+        $reply = md5(json_encode($resolution->answers));
 
         if ($context->state->get(self::STATE_KEY) === $reply) {
             return new Resolution(

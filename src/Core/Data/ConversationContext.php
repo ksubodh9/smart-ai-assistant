@@ -13,6 +13,8 @@ final class ConversationContext
         public readonly UserContext $user,
         public readonly IncomingMessage $message,
         public readonly ConversationState $state,
+        // The language of the reply (see Support\Locales::choose)
+        public readonly string $locale = 'en',
     ) {
     }
 }

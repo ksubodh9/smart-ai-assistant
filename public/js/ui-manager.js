@@ -440,7 +440,7 @@ class UIManager {
      * Everything else is rendered as text, so server content cannot inject HTML.
      */
     addFormattedMessage(message, isError = false) {
-        this.appendChatBubble(false, isError, (bubble) => this.appendFormattedText(bubble, message));
+        return this.appendChatBubble(false, isError, (bubble) => this.appendFormattedText(bubble, message));
     }
 
     appendText(parent, text) {
@@ -505,6 +505,16 @@ class UIManager {
     fillActionBubble(bubble, message, buttons) {
         bubble.replaceChildren();
         this.appendText(bubble, message);
+        this.appendActions(bubble, buttons);
+    }
+
+    /**
+     * Add a row of buttons under the content of a bubble (e.g. "Raise ticket"
+     * under the reply it belongs to).
+     * @param {Array<{label: string, secondary?: boolean, onClick: Function}>} buttons
+     */
+    appendActions(bubble, buttons) {
+        if (!bubble) return;
 
         const row = document.createElement('div');
         row.className = 'sa-chat-actions';

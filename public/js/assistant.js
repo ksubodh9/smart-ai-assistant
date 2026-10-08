@@ -33,6 +33,13 @@ class SmartAssistant {
     }
 
     initEventListeners() {
+        // Reply language menu (rendered only when the host offers more than one language)
+        const localeSelect = document.getElementById('sa-locale');
+        if (localeSelect) {
+            localeSelect.value = this.apiManager.getLocale();
+            localeSelect.addEventListener('change', () => this.apiManager.setLocale(localeSelect.value));
+        }
+
         // Starter questions under the welcome text (rendered only with resolve_typed_messages)
         document.querySelectorAll('#sa-suggestions .sa-suggestion').forEach(button => {
             button.addEventListener('click', () => this.handleSuggestion(button.dataset.send || button.textContent));
@@ -110,12 +117,12 @@ class SmartAssistant {
         if (result.success && result.data) {
             const data = result.data;
 
-            this.renderResponse(data);
+            const bubble = this.renderResponse(data);
             this.uiManager.setStatus('Ready to help');
 
             if (this.apiManager.resolveTypedMessages) {
                 // The assistant decides when to offer a ticket
-                this.renderActions(data.actions, { message: errorText, errorContext: null });
+                this.renderActions(data.actions, { message: errorText, errorContext: null }, bubble);
             } else if ((data.meta?.source ?? data.source) === 'unknown') {
                 // If unknown error, suggest manual query
                 setTimeout(() => {
@@ -143,23 +150,20 @@ class SmartAssistant {
     }
 
     /**
-     * Show an assistant reply. Uses the response blocks when the server sends
-     * them (protocol 1), else the legacy answer_en/answer_hi fields.
+     * Show an assistant reply as one bubble. Uses the response blocks when
+     * the server sends them (protocol 1; one text block in the reply
+     * language), else the legacy answer_en/answer_hi fields.
      * Server text may hold **bold**; it is never rendered as HTML.
+     * @returns {HTMLElement|undefined} The bubble, so actions can go under the reply
      */
     renderResponse(data) {
-        const headings = {
-            en: '**💡 Solution:**',
-            hi: '**🇮🇳 हिंदी में:**'
-        };
         const sections = [];
 
         if (Array.isArray(data.blocks)) {
             data.blocks.forEach(block => {
                 // Only known block types are shown; others are skipped
                 if (block && block.type === 'text' && block.text) {
-                    const heading = headings[block.locale];
-                    sections.push(heading ? `${heading}\n${block.text}` : String(block.text));
+                    sections.push(String(block.text));
                 } else if (block && block.type === 'key_value' && Array.isArray(block.items)) {
                     // e.g. a transaction's status: one "Label: Value" line per item
                     const lines = block.items
@@ -170,11 +174,11 @@ class SmartAssistant {
                 }
             });
         } else {
-            if (data.answer_en) sections.push(`${headings.en}\n${data.answer_en}`);
-            if (data.answer_hi) sections.push(`${headings.hi}\n${data.answer_hi}`);
+            if (data.answer_en) sections.push(String(data.answer_en));
+            if (data.answer_hi) sections.push(String(data.answer_hi));
         }
 
-        this.uiManager.addFormattedMessage(sections.length
+        return this.uiManager.addFormattedMessage(sections.length
             ? sections.join('\n\n')
             : 'I found information about this error, but couldn\'t format it properly. Please try rephrasing your question.');
     }
@@ -193,30 +197,44 @@ class SmartAssistant {
     }
 
     /**
-     * Show the actions of a response. Only actions with a handler here are
-     * shown; the server can never make the widget run anything else.
+     * Show the actions of a response, as buttons under the reply they belong
+     * to. Only actions with a handler here are shown; the server can never
+     * make the widget run anything else.
      * @param {{message: string, errorContext: ?string}} pending - What a ticket would contain
+     * @param {HTMLElement} [replyBubble] - The reply's bubble
      */
-    renderActions(actions, pending) {
+    renderActions(actions, pending, replyBubble) {
         const escalate = (Array.isArray(actions) ? actions : [])
             .find(action => action && action.type === 'action' && action.id === 'escalate');
 
-        if (escalate) {
+        if (!escalate) return;
+
+        if (replyBubble) {
+            this.uiManager.appendActions(replyBubble, [
+                { label: escalate.label || 'Raise ticket', onClick: () => this.confirmEscalation(pending) }
+            ]);
+        } else {
             this.offerEscalation(pending, escalate.label);
         }
     }
 
     /**
-     * Offer a ticket. Nothing is sent until the user confirms what will be sent.
+     * Offer a ticket in a bubble of its own (when there is no reply to put
+     * the button under, e.g. files sent without text). Nothing is sent until
+     * the user confirms what will be sent.
      */
     offerEscalation(pending, label = 'Raise ticket') {
         const bubble = this.uiManager.addActionMessage(
-            'Still need help? Our support team can look into this.',
-            [{ label: label || 'Raise ticket', onClick: () => this.confirmEscalation(bubble, pending) }]
+            'Our support team can look into this.',
+            [{ label: label || 'Raise ticket', onClick: () => this.confirmEscalation(pending, bubble) }]
         );
     }
 
-    confirmEscalation(bubble, pending) {
+    /**
+     * Show what a ticket would contain, with "Send to support" and "Cancel".
+     * @param {HTMLElement} [bubble] - An offer bubble to reuse; else a new bubble is added
+     */
+    confirmEscalation(pending, bubble = null) {
         const files = this.filePreviewManager.getAttachments();
         const lines = ['This will be sent to our support team:'];
 
@@ -224,14 +242,20 @@ class SmartAssistant {
         if (pending.message) lines.push(`• Message: ${pending.message}`);
         if (files.length) lines.push(`• Attachments: ${files.length}`);
 
-        this.uiManager.fillActionBubble(bubble, lines.join('\n'), [
+        const buttons = [
             { label: 'Send to support', onClick: () => this.raiseTicket(pending) },
             {
                 label: 'Cancel',
                 secondary: true,
                 onClick: () => this.uiManager.addChatMessage('Okay, nothing was sent.', false)
             }
-        ]);
+        ];
+
+        if (bubble) {
+            this.uiManager.fillActionBubble(bubble, lines.join('\n'), buttons);
+        } else {
+            this.uiManager.addActionMessage(lines.join('\n'), buttons);
+        }
     }
 
     async raiseTicket(pending) {
@@ -295,8 +319,8 @@ class SmartAssistant {
             const data = result.data;
             const offersTicket = (data.actions || []).some(action => action && action.id === 'escalate');
 
-            this.renderResponse(data);
-            this.renderActions(data.actions, pending);
+            const bubble = this.renderResponse(data);
+            this.renderActions(data.actions, pending, bubble);
 
             // Attached files are only sent with a ticket; say so if none was offered
             if (attachments.length && !offersTicket) {

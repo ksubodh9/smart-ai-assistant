@@ -107,14 +107,14 @@ class InputClassifier
             return $this->result(self::TYPE_GREETING, false);
         }
 
-        // 5. Vague input check
+        // 5. Vague input check; the category says which service it is about ("refund issue")
         if ($this->matches($trimmed, self::TYPE_VAGUE)) {
-            return $this->result(self::TYPE_VAGUE, false);
+            return $this->result(self::TYPE_VAGUE, false, $this->detectCategory($trimmed));
         }
 
-        // 6. Explicit escalation request check
+        // 6. Explicit escalation request check; the category goes with the ticket
         if ($this->matches($trimmed, self::TYPE_ESCALATION_REQUEST)) {
-            return $this->result(self::TYPE_ESCALATION_REQUEST, true, null, true);
+            return $this->result(self::TYPE_ESCALATION_REQUEST, true, $this->detectCategory($trimmed), true);
         }
 
         // 7. Mild abuse check (process normally)
