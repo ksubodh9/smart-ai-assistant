@@ -14,6 +14,10 @@
         "illuminate/support": "^10.0|^11.0",
         "phpoffice/phpspreadsheet": "^1.29"
     },
+    "suggest": {
+        "smalot/pdfparser": "Needed to ingest PDF documents with smart-ai:ingest (^2.12)",
+        "anthropic-ai/sdk": "Needed for document answers with ai.driver = anthropic (^0.57)"
+    },
     "autoload": {
         "psr-4": {
             "Subodh\\SmartAiAssistant\\": "src/"
@@ -30,7 +34,9 @@
     "prefer-stable": true,
     "require-dev": {
         "orchestra/testbench": "^9.0",
-        "phpunit/phpunit": "^11.0"
+        "phpunit/phpunit": "^11.0",
+        "smalot/pdfparser": "^2.12",
+        "anthropic-ai/sdk": "^0.57"
     },
     "autoload-dev": {
         "psr-4": {
@@ -40,5 +46,10 @@
     },
     "scripts": {
         "test": "phpunit"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
     }
 }

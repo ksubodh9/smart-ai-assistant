@@ -507,10 +507,10 @@ knowledge itself.
 |---|---|---|---|
 | **10. Conversational replies and reply language** *(done)* | `Support\Locales` + config `locales`: the reply language is the widget's menu choice, else the message's language (script, host word patterns, catch-all), else the conversation's, else the host's, else the default. Per-language maps in `Resolution`, `ResponseCatalog`, serializer and store; one text block per reply + `meta.locale`. Conversational texts, no category prefixes (`unknown_category` instead). Widget: no "Solution"/"हिंदी में" headings, language menu, "Raise ticket" inside the reply bubble. | **Yes** | — |
 | **11. Baseline evaluation** *(rules-only part done)* | Run `smart-ai:eval` on the real queries; keep the JSON as the "before" number. Done on 3,029 labelled tickets with an empty KB: 2.6% of expected outcomes matched. MaddoxPay routing config then tuned (escalation for activation/cancel/install/account-change requests, vague for bare service names, 8 more categories, category kept on escalation and vague): 16.5% matched, "not documented" 97.2% → 81.8%. Still to do: the same run in the host against the real KB (needs a release), and the team's `answer_exists` column. | Host routing | Labelled sheet |
-| **12. Document ingestion** | Tables `smart_ai_documents` (title, file, mime, checksum, scope, `audience` public/users, version, active/archived) and `smart_ai_document_chunks` (FULLTEXT). `TextExtractor` contract (PDF, DOCX, XLSX/CSV, TXT/MD/HTML); `smart-ai:ingest`. Re-upload by title = new version; same checksum = no-op. | None | — |
-| **13. Document retrieval** | `DocumentKnowledgeSource` (FULLTEXT; LIKE on SQLite), filtered by audience and active version **in SQL**. Registered separately (passages are not answers), not in `knowledge.sources`. Eval reports retrieval hits. | None | 12 |
-| **14. Grounded answers** | `AnswerGenerator` contract (one HTTP driver + null driver) and `DocumentAnswerStrategy` between `knowledge_lookup` and `fallback`, capability `document_answers` (off by default). No passage above `min_score` → no LLM call; `answerable: false`, error or timeout → `null` → unchanged fallback + "Raise ticket". Redacted question only; answers cite the source document and are stored with document ids and versions. | Only with the flag | 10, 13 |
-| **15. Measure and roll out** | Eval against the step 11 baseline; host ingests its first documents and enables the flag. | Host | 11, 14 |
+| **12. Document ingestion** *(done)* | Tables `smart_ai_documents` (title, file, mime, checksum, scope, `audience` public/users, version, active/archived) and `smart_ai_document_chunks` (FULLTEXT). `TextExtractor` contract (PDF, DOCX, XLSX/CSV, TXT/MD/HTML); `smart-ai:ingest`. Re-upload by title = new version; same checksum = no-op. Done: scope is the `service` column (the domain, as in the KB); `smart-ai:documents list|archive` to withdraw a document; PDF needs the optional `smalot/pdfparser` (LGPL, `suggest`); passages ≤ `documents.chunk_size` characters, never across a heading, with the heading path stored. | None | — |
+| **13. Document retrieval** *(done)* | `DocumentKnowledgeSource` (FULLTEXT; LIKE on SQLite), filtered by audience and active version **in SQL**. Registered separately (passages are not answers), not in `knowledge.sources`. Eval reports retrieval hits. Done: contract `PassageSource` → `Passage`; score = share of search words found (PHP, same on every database), `min_score` 0.4; LIKE also when FULLTEXT finds nothing (InnoDB splits Devanagari words); eval counts `with_passages` / `unresolved_with_passages` and never calls the LLM. | None | 12 |
+| **14. Grounded answers** | `AnswerGenerator` contract (one HTTP driver + null driver) and `DocumentAnswerStrategy` between `knowledge_lookup` and `fallback`, capability `document_answers` (off by default). No passage above `min_score` → no LLM call; `answerable: false`, error or timeout → `null` → unchanged fallback + "Raise ticket". Redacted question only; answers cite the source document and are stored with document ids and versions. Done: drivers `null` and `anthropic` (official SDK, optional; structured output; server-side fallbacks); daily caps overall and per user; `LoopGuard` compares passage ids for document answers. | Only with the flag | 10, 13 |
+| **15. Measure and roll out** *(package side done)* | Eval against the step 11 baseline; host ingests its first documents and enables the flag. Package: rollout steps in README ("Document answers"). Host still to do: release + `composer update`, `migrate`, `composer require anthropic-ai/sdk smalot/pdfparser`, ingest, eval with `--baseline`, tune `min_score`, set the driver/key/flag. | Host | 11, 14 |
 
 Out of scope for this phase: embeddings / vector DB, LLM tool calling or
 agents, conversation memory, automatic knowledge generation, upload UI, OCR,
@@ -520,7 +520,13 @@ Effect on §11: the reply-language policy is decided (storage for a third KB
 language is still deferred); the LLM client shape and a second knowledge kind
 get decided in steps 12–14; vector storage stays deferred.
 
-Open decisions before step 14: LLM provider/model; whether sending redacted
-questions and document passages to it is allowed; document answers for
-logged-in users only or guests too; whether to show the source document title;
-LLM timeout and cost limit.
+Open decisions before step 14 were built as configurable defaults (built
+2026-10-13; the host confirms them before enabling the flag):
+
+| Decision | Default | Config |
+|---|---|---|
+| LLM provider / model | Claude via the official SDK, `claude-opus-5-5`, effort `low` | `ai.driver`, `ai.model`, `ai.effort`; any `AnswerGenerator` class |
+| Sending redacted questions + passages out | Only when the host turns on `document_answers` and sets a driver | `capabilities.document_answers`, `ai.driver` |
+| Guests | No; when allowed, `public` documents only | `documents.answers.guests` |
+| Show source title | Yes ("Source: …", translatable) | `documents.answers.show_sources`, `responses.document_sources` |
+| Timeout / cost | 20 s per try, 1 retry, 4096 max tokens; 1000 calls/day overall, 30 per user | `ai.timeout`, `ai.max_retries`, `ai.max_tokens`, `documents.answers.*daily_limit` |

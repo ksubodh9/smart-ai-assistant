@@ -7,16 +7,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
+use Subodh\SmartAiAssistant\Answering\AnswerCallLimiter;
+use Subodh\SmartAiAssistant\Answering\AnthropicAnswerGenerator;
+use Subodh\SmartAiAssistant\Answering\NullAnswerGenerator;
+use Subodh\SmartAiAssistant\Core\Contracts\AnswerGenerator;
 use Subodh\SmartAiAssistant\Core\Contracts\ConversationStore;
+use Subodh\SmartAiAssistant\Core\Contracts\PassageSource;
 use Subodh\SmartAiAssistant\Core\Contracts\EscalationChannel;
 use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
 use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
+use Subodh\SmartAiAssistant\Documents\DocumentIngester;
+use Subodh\SmartAiAssistant\Documents\TextChunker;
 use Subodh\SmartAiAssistant\Escalation\NullEscalationChannel;
 use Subodh\SmartAiAssistant\Knowledge\CompositeKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource;
+use Subodh\SmartAiAssistant\Knowledge\DocumentKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\KeywordKnowledgeSource;
 use Subodh\SmartAiAssistant\Persistence\EloquentConversationStore;
 use Subodh\SmartAiAssistant\Resolution\StrategyRegistry;
@@ -165,12 +173,61 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
             );
         });
 
+        // Document ingestion: extractors per file extension (host entries add or replace, null removes one)
+        $this->app->bind(DocumentIngester::class, function ($app) {
+            return new DocumentIngester(
+                $app,
+                array_filter(array_merge(DocumentIngester::DEFAULT_EXTRACTORS, (array) config('smart-ai-assistant.documents.extractors', []))),
+                new TextChunker((int) config('smart-ai-assistant.documents.chunk_size', 1500)),
+            );
+        });
+
+        // Document passages for grounded answers (not a KnowledgeSource: passages are not answers)
+        $this->app->bind(PassageSource::class, function ($app) {
+            $retrieval = (array) config('smart-ai-assistant.documents.retrieval', []);
+            $class = $retrieval['source'] ?? DocumentKnowledgeSource::class;
+
+            return $class === DocumentKnowledgeSource::class
+                ? new DocumentKnowledgeSource(
+                    config('smart-ai-assistant.default_service', 'general'),
+                    (float) ($retrieval['min_score'] ?? 0.4),
+                    (array) ($retrieval['stopwords'] ?? []),
+                )
+                : $app->make($class);
+        });
+
+        // 'anthropic', 'null', or a class implementing AnswerGenerator; anything else means no LLM
+        $this->app->bind(AnswerGenerator::class, function ($app) {
+            $config = (array) config('smart-ai-assistant.ai', []);
+            $driver = (string) ($config['driver'] ?? 'null');
+
+            if ($driver === 'anthropic') {
+                return new AnthropicAnswerGenerator($config);
+            }
+
+            return class_exists($driver) && is_subclass_of($driver, AnswerGenerator::class)
+                ? $app->make($driver)
+                : new NullAnswerGenerator();
+        });
+
+        $this->app->bind(AnswerCallLimiter::class, function ($app) {
+            $answers = (array) config('smart-ai-assistant.documents.answers', []);
+
+            return new AnswerCallLimiter(
+                $app->make('cache.store'),
+                isset($answers['daily_limit']) ? (int) $answers['daily_limit'] : null,
+                isset($answers['per_user_daily_limit']) ? (int) $answers['per_user_daily_limit'] : null,
+            );
+        });
+
         // Register console commands
         if ($this->app->runningInConsole()) {
             $this->commands([
                 \Subodh\SmartAiAssistant\Console\Commands\SeedKbFromCsv::class,
                 \Subodh\SmartAiAssistant\Console\Commands\PruneConversations::class,
                 \Subodh\SmartAiAssistant\Console\Commands\EvaluateQueries::class,
+                \Subodh\SmartAiAssistant\Console\Commands\IngestDocuments::class,
+                \Subodh\SmartAiAssistant\Console\Commands\ManageDocuments::class,
             ]);
         }
     }

@@ -34,6 +34,10 @@ class ResponseCatalog
         // A data tool failed
         'tool_failed' => ['en' => "I couldn't check that right now. Please try again in a few minutes."],
 
+        // Line under an answer written from documents (:titles = their titles);
+        // shown with documents.answers.show_sources
+        'document_sources' => ['en' => 'Source: :titles'],
+
         // No knowledge matched; unknown_category when a category was detected (:category)
         'unknown'          => ['en' => "Sorry, I don't have an answer for that yet. Our support team can look into it for you."],
         'unknown_category' => ['en' => "Sorry, I don't have an answer for this **:category** query yet. Our support team can look into it for you."],

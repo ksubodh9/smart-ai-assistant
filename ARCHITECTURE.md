@@ -407,6 +407,77 @@ outcome (normalized and redacted). `Evaluator::summary()` gives the percentages
 saved with `--json` and compared with `--baseline`, so every change to rules,
 knowledge or tools has a before/after number.
 
+### Documents (`smart-ai:ingest`)
+
+Host documents are a second kind of knowledge, kept apart from the KB table
+because passages are not answers. `Documents\DocumentIngester` picks a
+`Core\Contracts\TextExtractor` by file extension (`DEFAULT_EXTRACTORS`, merged
+with `documents.extractors`), and `Documents\TextChunker` splits the text into
+passages. Extractors write headings as Markdown heading lines, so passages
+never cross a heading and carry the heading path. A sha256 checksum makes
+re-ingesting the same file a no-op. A changed file under the same domain and
+title becomes version n+1, and the previous active version is archived in
+the same transaction. Extraction runs before the transaction, so a failed
+file leaves the current version active.
+
+Tables: `smart_ai_documents` (one row per version: `service`, `title`,
+`file_name`, `mime`, `size`, `checksum`, `audience` public/users, `version`,
+`status` active/archived) and `smart_ai_document_chunks` (`position`,
+`heading`, `content`, FULLTEXT on heading + content on MySQL/MariaDB).
+
+### Document answers (`document_answers` capability)
+
+**Retrieval.** `Core\Contracts\PassageSource` (default
+`Knowledge\DocumentKnowledgeSource`) returns `Core\Data\Passage` objects.
+It is kept apart from `KnowledgeSource` on purpose: a passage is material an
+answer is grounded in, not an answer the user sees as written. The message
+is reduced to search words (no stopwords from
+`DEFAULT_STOPWORDS` + `documents.retrieval.stopwords`, no Latin words under
+3 letters). MySQL/MariaDB narrow the candidates with `MATCH … AGAINST`. When
+that finds nothing (InnoDB splits Devanagari words at vowel signs), and on
+other databases, a LIKE search is used. Each candidate is scored in PHP as the
+share of search words it contains (plural "s" tolerated), so
+`documents.retrieval.min_score` is a plain fraction on every database.
+Domain, `status = active` and the allowed audiences are filtered in SQL.
+
+**Answering.** `Strategies\DocumentAnswerStrategy` runs after
+`KnowledgeLookupStrategy` for `report_error` messages. Guests are skipped
+unless `documents.answers.guests` is on, and then they only search `public`
+documents. Then:
+1. Search for passages. If there are none, return null: no LLM call.
+2. `Answering\AnswerCallLimiter` checks the daily caps (overall and per
+   user). This uses the cache.
+3. `Core\Contracts\AnswerGenerator` (`ai.driver`) gets the **redacted**
+   question, the passages and the reply language ("Hindi (hi)").
+4. An answer comes back with `answerable` and some text. It becomes an
+   `answered` resolution with source `document`, plus a
+   `responses.document_sources` line naming the documents used. It is
+   stored with `data.documents` (id, title, version) and `data.passages`.
+
+Anything else (unanswerable, null, an exception, which goes to `report()`)
+returns null, so the fallback replies as before.
+
+`Answering\AnthropicAnswerGenerator` is the `anthropic` driver. It uses the
+optional official SDK (`anthropic-ai/sdk`) and makes one beta Messages call
+with a JSON-schema `outputConfig` (`{answerable, answer, source_ids}`),
+`effort` from config, and the server-side `fallbacks: "default"` (beta
+`server-side-fallback-2026-07-01`; `ai.fallbacks = null` turns it off). The
+HTTP timeout is set on a Guzzle transporter, because the SDK leaves timeouts
+to the HTTP client. Anything other than `stop_reason = end_turn` (a refusal,
+or a cut-off at `max_tokens`) and malformed JSON give null. The passages and
+the question are wrapped in tags they cannot close. `NullAnswerGenerator`
+(driver `null` or any unknown value, such as the old `openai` stub) never
+answers.
+
+`smart-ai:eval` forces the capability off, so evaluation never calls the LLM.
+When active documents exist, it counts the queries that have a passage above
+`min_score` (`with_passages`, and `unresolved_with_passages`: the ones
+document answers would take over for a logged-in user).
+
+InnoDB FULLTEXT indexes only see committed rows, so `DocumentKnowledgeSourceTest`
+uses `DatabaseTruncation` (and empties the document tables in `tearDown`)
+instead of `RefreshDatabase`.
+
 ### Widget configuration (`widget`)
 
 The view is the same for every host; `Support\WidgetConfig` turns

@@ -188,6 +188,17 @@ domain `general`). Publish the config once
     to require exact words. Measure the effect with `smart-ai:eval`; its
     "answerable by a data tool" line counts queries a tool would answer for a
     logged-in user.
+14. `documents`: guides, policies and FAQs stored as passages with
+    `smart-ai:ingest` (see "Documents" below). Set the default `audience`
+    (`users` = logged-in only, `public` = guests too). For PDFs run
+    `composer require smalot/pdfparser` in your app.
+15. `ai` and `capabilities.document_answers` (or
+    `SMART_AI_DOCUMENT_ANSWERS=true`): answers written by an LLM from your
+    documents. Set `SMART_AI_DRIVER=anthropic` and `SMART_AI_API_KEY`, and run
+    `composer require anthropic-ai/sdk`. Replace the old `ai` stub in your
+    published config with the package's `ai` block. Tune
+    `documents.retrieval.min_score`, `documents.answers` (guests, sources line,
+    daily caps) and `responses.document_sources` per language.
 
 The config is merged one level deep: a top-level key in your file replaces the
 package's value for that key entirely. The exception is `widget`, whose
@@ -306,6 +317,64 @@ packages/smart-ai-assistant/
 └── routes/
     └── web.php
 ```
+
+---
+
+## 📄 Documents (`smart-ai:ingest`)
+
+Store your own documents as searchable passages. With document answers on
+(see "Document answers" below), questions that the knowledge base can't
+answer get an answer written from them.
+
+```bash
+php artisan smart-ai:ingest docs/refund-policy.pdf [--title="Refund policy"] [--domain=PAN] [--audience=public]
+php artisan smart-ai:ingest docs/                    # every supported file, subfolders included
+php artisan smart-ai:documents [--all]               # list (active versions; --all adds archived)
+php artisan smart-ai:documents archive "Refund policy"
+```
+
+Supported: PDF with a text layer (needs `smalot/pdfparser`; scanned PDFs need
+OCR, which is not supported), DOCX, XLSX/XLS/CSV (row 1 is the header; each
+row becomes "Header: value" lines), TXT/MD and HTML. Text is split into
+passages of up to `documents.chunk_size` characters that never cross a
+heading; each passage records its heading path.
+
+The title defaults to the file name without extension. Ingesting the same
+title again with a changed file adds a new version and archives the previous
+one (old versions stay in the database). The same file again changes nothing,
+except the audience when `--audience` differs. Add a file type by mapping its
+extension to your own `TextExtractor` class in `documents.extractors`.
+
+---
+
+### Document answers
+
+When the knowledge base has no answer, the assistant searches the active
+documents. It sends the question, with personal data masked, and up to
+`documents.answers.passages` passages to the LLM, which answers only from
+them. The answer ends with "Source: <document titles>". In each of these cases
+the user gets the usual "no answer yet" reply with "Raise ticket", as before:
+
+- no passage contains at least `documents.retrieval.min_score` of the
+  question's words (no LLM call is made then);
+- a daily cap is reached;
+- the model says the passages don't answer the question;
+- the model declines, fails or times out (`ai.timeout`).
+
+Guests get document answers only with `documents.answers.guests`, and only
+from `public` documents.
+
+Rollout:
+1. `php artisan migrate`, then `composer require anthropic-ai/sdk` (and
+   `smalot/pdfparser` for PDFs).
+2. Ingest the documents, then measure:
+   `php artisan smart-ai:eval queries.csv --baseline=before.json`. The
+   "matching document passage" lines show how many queries would reach
+   document answers. Raise or lower `min_score` until the matches look right.
+3. Set `SMART_AI_DRIVER=anthropic`, `SMART_AI_API_KEY=...` and
+   `SMART_AI_DOCUMENT_ANSWERS=true`. Ask a few real questions and check the
+   stored conversations (`smart_ai_messages.data.documents` names the
+   document versions used).
 
 ---
 

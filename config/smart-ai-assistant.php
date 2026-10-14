@@ -94,6 +94,56 @@ return [
         'typo_tolerance' => true,
     ],
 
+    // Host documents (guides, policies, FAQs) stored with smart-ai:ingest and
+    // split into passages. With the 'document_answers' capability, questions
+    // the knowledge base can't answer get an answer written from them.
+    'documents' => [
+        // Who may get answers from a newly ingested document unless
+        // --audience says otherwise: 'users' (logged-in only) or 'public'
+        'audience' => 'users',
+
+        // Longest passage in characters. Passages keep whole paragraphs where
+        // they fit and never cross a heading.
+        'chunk_size' => 1500,
+
+        // File extension => class implementing
+        // Subodh\SmartAiAssistant\Core\Contracts\TextExtractor. Entries add to
+        // or replace the defaults (pdf, docx, xlsx, xls, csv, txt, md, html,
+        // htm; see DocumentIngester::DEFAULT_EXTRACTORS); null removes one.
+        // PDF files need: composer require smalot/pdfparser
+        'extractors' => [],
+
+        // Finding passages for a message
+        'retrieval' => [
+            // Share of the message's search words (0–1) a passage must
+            // contain to be used; tune it with smart-ai:eval
+            'min_score' => 0.4,
+
+            // Words left out of searches besides common English ones
+            // (DocumentKnowledgeSource::DEFAULT_STOPWORDS), e.g. romanised
+            // filler words of your users' language
+            'stopwords' => [],
+        ],
+
+        // Answers written from passages ('document_answers' capability)
+        'answers' => [
+            // Passages sent with each question
+            'passages' => 3,
+
+            // false: only logged-in users get document answers (and they may
+            // see 'users' and 'public' documents); true: guests too ('public' only)
+            'guests' => false,
+
+            // Add a "Source: <document titles>" line (responses.document_sources)
+            'show_sources' => true,
+
+            // Caps on LLM calls per calendar day, overall and per logged-in
+            // user (guests count only towards the overall cap); null = no cap
+            'daily_limit'          => 1000,
+            'per_user_daily_limit' => 30,
+        ],
+    ],
+
     // Features the host enables. Strategies that need a disabled capability
     // are skipped.
     'capabilities' => [
@@ -101,6 +151,8 @@ return [
         'escalation' => true,
         // Answers from host data through the data_tools below
         'data_tools' => env('SMART_AI_DATA_TOOLS', false),
+        // Answers written by an LLM from ingested documents (needs 'ai' below)
+        'document_answers' => env('SMART_AI_DOCUMENT_ANSWERS', false),
     ],
 
     // Host DataTool classes (Subodh\SmartAiAssistant\Core\Contracts\DataTool),
@@ -117,6 +169,7 @@ return [
             \Subodh\SmartAiAssistant\Strategies\ExplicitEscalationStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\DataToolStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\KnowledgeLookupStrategy::class,
+            \Subodh\SmartAiAssistant\Strategies\DocumentAnswerStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\FallbackStrategy::class,
         ],
         'guards' => [
@@ -215,11 +268,27 @@ return [
         ],
     ],
 
-    // Stub configuration for future AI integration (V2)
+    // The LLM that writes document answers. Only the redacted question and
+    // the retrieved passages are sent to it.
     'ai' => [
-        'enabled' => false,
-        'driver' => env('SMART_AI_DRIVER', 'openai'), // e.g., openai, anthropic
-        'api_key' => env('SMART_AI_API_KEY', null),
-        // Additional driver‑specific options can be added here
+        // 'null' (no LLM), 'anthropic' (Claude; composer require
+        // anthropic-ai/sdk), or a class implementing
+        // Subodh\SmartAiAssistant\Core\Contracts\AnswerGenerator
+        'driver'  => env('SMART_AI_DRIVER', 'null'),
+        'api_key' => env('SMART_AI_API_KEY'),
+        'model'   => env('SMART_AI_MODEL', 'claude-opus-5-5'),
+
+        // How much the model thinks before answering: low, medium, high
+        'effort'     => env('SMART_AI_EFFORT', 'low'),
+        'max_tokens' => 4096,
+
+        // Seconds to wait for an answer (per try), and extra tries on
+        // network errors, rate limits and overload
+        'timeout'     => 20,
+        'max_retries' => 1,
+
+        // 'default': if the model declines a question for policy reasons,
+        // the API retries it on its default fallback model. null turns it off.
+        'fallbacks' => 'default',
     ],
 ];

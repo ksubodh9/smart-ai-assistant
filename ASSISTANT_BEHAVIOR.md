@@ -173,7 +173,8 @@ We received this error, it's not yet documented. Please contact support or forwa
 ### Backend Enforcement (V1)
 
 - **Classification:** `Support\InputClassifier` (via `Understanding\RuleBasedInterpreter`)
-- **Resolution:** `Strategies\InputGuardStrategy` (canned replies), `ExplicitEscalationStrategy`, `KnowledgeLookupStrategy`, `FallbackStrategy`, run in order by `Core\Resolution\ResolverPipeline`
+- **Resolution:** `Strategies\InputGuardStrategy` (canned replies), `ExplicitEscalationStrategy`, `DataToolStrategy`, `KnowledgeLookupStrategy`, `DocumentAnswerStrategy`, `FallbackStrategy`, run in order by `Core\Resolution\ResolverPipeline`
+- **Document answers** (`document_answers` capability, off by default) follow the same rules: the model may only restate what the host's passages say. Whenever there is no grounded answer (no passage above `min_score`, a call cap reached, the model declines, fails or times out), the reply is the normal "no answer yet" fallback with the escalation path. The same passages answering twice in a row count as a repeat (`LoopGuard`).
 - **Never loop / prompt once:** `Resolution\Guards\LoopGuard` and `ClarifyOnceGuard`, applied to every resolution
 - **No conversation record** is created for non-processable input (empty, greeting, vague, severe abuse)
 - **Mild abuse** is logged in conversation metadata but processed normally

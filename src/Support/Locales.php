@@ -80,6 +80,14 @@ class Locales
     }
 
     /**
+     * A language's name for people (and for prompts), e.g. 'Hinglish'.
+     */
+    public function label(string $code): string
+    {
+        return (string) ($this->available[$code]['label'] ?? $code);
+    }
+
+    /**
      * The language a message is written in, or null when it cannot be told
      * (too short, or no configured rule matches).
      */

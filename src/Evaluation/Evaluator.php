@@ -3,10 +3,13 @@
 namespace Subodh\SmartAiAssistant\Evaluation;
 
 use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
+use Subodh\SmartAiAssistant\Core\Contracts\PassageSource;
+use Subodh\SmartAiAssistant\Models\Document;
 use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
 use Subodh\SmartAiAssistant\Core\Data\ConversationContext;
 use Subodh\SmartAiAssistant\Core\Data\IncomingMessage;
 use Subodh\SmartAiAssistant\Core\Data\Resolution;
+use Subodh\SmartAiAssistant\Core\Data\StructuredProblem;
 use Subodh\SmartAiAssistant\Core\Data\UserContext;
 use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
 
@@ -17,6 +20,11 @@ use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
  * Nothing is stored and nothing is remembered between queries: each one is a
  * new conversation of a guest (so data tools, which need a user, do not run;
  * queries where a tool would apply are counted under "entities").
+ *
+ * Document answers are never generated here (that would call the LLM for
+ * every query); instead, with a PassageSource, it counts the queries that
+ * have a passage above min_score, i.e. those that would reach the LLM for a
+ * logged-in user.
  */
 class Evaluator
 {
@@ -24,6 +32,7 @@ class Evaluator
         private readonly Interpreter $interpreter,
         private readonly ResolverPipeline $pipeline,
         private readonly Redactor $redactor,
+        private readonly ?PassageSource $passages = null,
     ) {
     }
 
@@ -45,6 +54,8 @@ class Evaluator
             'categories'        => [],
             'with_entities'     => 0,
             'unresolved_with_entities' => 0,
+            'with_passages'     => 0,
+            'unresolved_with_passages' => 0,
             'labelled'          => 0,
             'label_matches'     => 0,
             'category_labelled' => 0,
@@ -85,6 +96,17 @@ class Evaluator
                 // Guests get no data tools; a logged-in user could get these answered
                 if ($resolution->outcome === Resolution::UNRESOLVED) {
                     $report['unresolved_with_entities']++;
+                }
+            }
+
+            // Retrieval only for questions (canned replies never reach documents)
+            if ($this->passages !== null && $problem->intent === StructuredProblem::INTENT_REPORT_ERROR
+                && in_array($resolution->outcome, [Resolution::UNRESOLVED, Resolution::ANSWERED], true)
+                && $this->passages->search($text, Document::AUDIENCES, 1) !== []) {
+                $report['with_passages']++;
+
+                if ($resolution->outcome === Resolution::UNRESOLVED) {
+                    $report['unresolved_with_passages']++;
                 }
             }
 
@@ -141,6 +163,8 @@ class Evaluator
             'with_category_pct'      => $percent($report['with_category'], $report['total']),
             'with_entities_pct'      => $percent($report['with_entities'], $report['total']),
             'unresolved_with_entities_pct' => $percent($report['unresolved_with_entities'], $report['total']),
+            'with_passages_pct'      => $percent($report['with_passages'], $report['total']),
+            'unresolved_with_passages_pct' => $percent($report['unresolved_with_passages'], $report['total']),
         ];
 
         foreach ([Resolution::UNRESOLVED, Resolution::CLARIFY, Resolution::REFUSE, Resolution::ESCALATE] as $outcome) {

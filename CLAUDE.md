@@ -23,12 +23,18 @@ php artisan view:clear
 php artisan smart-ai:seed-kb path/to/file.xlsx [--domain=PAN]   # domain defaults to config default_service
 php artisan smart-ai:seed-kb keywords.csv --keywords            # column A = words that must all appear, any order
 
+# Store host documents as passages (PDF needs smalot/pdfparser; DOCX, XLSX/XLS/CSV, TXT/MD, HTML built in).
+# A file or a folder; same title + changed file = new version (old one archived); same file = no-op
+php artisan smart-ai:ingest path/to/file-or-folder [--title=...] [--domain=PAN] [--audience=public|users]
+php artisan smart-ai:documents [list] [--all] | archive "Title"
+
 # Delete conversations idle longer than conversations.retention_days (no-op when null); hosts schedule it daily
 php artisan smart-ai:prune [--days=90]
 
 # Replay real queries through the interpreter + pipeline and report coverage (nothing stored, each query
 # a fresh guest conversation, so data tools do not run). A = query, B = expected outcome/source, C = expected category;
-# --list=clarify shows another outcome's texts (masked by the Redactor); --json/--baseline compare two runs
+# --list=clarify shows another outcome's texts (masked by the Redactor); --json/--baseline compare two runs.
+# Document answers are forced off (no LLM calls); with active documents it counts queries with a passage above min_score
 php artisan smart-ai:eval queries.csv [--top=20] [--list=unresolved] [--json=before.json] [--baseline=before.json]
 ```
 
@@ -50,16 +56,16 @@ The JavaScript has no automated tests. Frontend changes are still verified manua
 ### Backend request flow: `POST /smart-assistant/message` (and `/help`)
 Route names: `smart-assistant.message` (payload `text`, `source` = `typed` | `page_error` | `suggestion`, default `typed`) and the older `smart-assistant.help` (payload `error_text`, always `page_error`), kept for widgets released before `/message`. Both take `page_url` and `conversation_id` and return the same JSON. The middleware is `config('smart-ai-assistant.middleware')` (package default `['web']`; hosts add their auth middleware, e.g. MaddoxPay uses `['web', 'sentinel.auth']`), followed by `throttle:smart-assistant`. That rate limiter is defined in the service provider, with limits per session and per IP from `config('smart-ai-assistant.rate_limit')`. The text is limited to 1000 characters, and only the path of `page_url` is stored. Neither endpoint ever creates a ticket.
 
-`MessageController` and `ErrorHelpController` only validate and hand over to `Http\MessageResponder`: resolve user → open conversation → interpret → `ResolverPipeline` → store → serialize. No LLM is called; `config('smart-ai-assistant.ai')` is a stub for later. Collaborators are method-injected, because the router reuses controller instances and they depend on per-request config. All bindings are in the service provider. See the pipeline section of [ARCHITECTURE.md](ARCHITECTURE.md).
+`MessageController` and `ErrorHelpController` only validate and hand over to `Http\MessageResponder`: resolve user → open conversation → interpret → `ResolverPipeline` → store → serialize. The only LLM call is the optional document answer (`DocumentAnswerStrategy`, see "Document answers" below). Collaborators are method-injected, because the router reuses controller instances and they depend on per-request config. All bindings are in the service provider. See the pipeline section of [ARCHITECTURE.md](ARCHITECTURE.md).
 **Conversation first:** **`Core\Contracts\ConversationStore`** (`Persistence\EloquentConversationStore`) runs before interpretation: `open()` continues the `conversation_id` the widget sent back only if it belongs to the caller (same user id; for guests, same session, stored as a sha256 `meta.guest_key`) and was active within `conversations.idle_minutes`; otherwise it silently creates a new conversation (status `open`). Every response carries a conversation id. The widget keeps it in `sessionStorage` per tab.
 
 1. **`Core\Contracts\Interpreter`** (default `Understanding\RuleBasedInterpreter`) turns the text into a `Core\Data\StructuredProblem` with `intent`, `domains`, and `signals`; `signals['input_type']` keeps the legacy classifier type for the wire format. It wraps **`Support\InputClassifier`**, which runs Unicode-aware (`/u`) regex checks in a fixed priority order: empty → severe abuse → noise → greeting → vague → escalation request → mild abuse → valid. Invalid UTF-8 is noise. Patterns default to generic English (`InputClassifier::DEFAULT_PATTERNS`); `understanding.patterns` replaces them per type. Categories come only from `understanding.categories` (whole words, optional plural "s"; first matching category wins, so hosts list specific services first). Valid, vague and escalation-request messages carry a category (it goes with the ticket); other canned types do not. MaddoxPay's patterns and categories were tuned on its labelled ticket sheet (step 11; `RealQueryRoutingTest` pins real phrasings): activation, cancellation, installation and account-change requests are escalation requests; a bare service name is vague.
-2. **`Core\Resolution\ResolverPipeline`** runs `resolution.strategies` in order (first non-null `Core\Data\Resolution` wins), skipping strategies whose `capabilities()` are disabled in `capabilities`. The defaults are `InputGuardStrategy` (canned reply, not stored), `ExplicitEscalationStrategy` ("Raise Ticket"), `DataToolStrategy`, `KnowledgeLookupStrategy`, and `FallbackStrategy` (must stay last). Reply texts come from `Support\ResponseCatalog` (generic defaults, `responses` overrides per key).
+2. **`Core\Resolution\ResolverPipeline`** runs `resolution.strategies` in order (first non-null `Core\Data\Resolution` wins), skipping strategies whose `capabilities()` are disabled in `capabilities`. The defaults are `InputGuardStrategy` (canned reply, not stored), `ExplicitEscalationStrategy` ("Raise Ticket"), `DataToolStrategy`, `KnowledgeLookupStrategy`, `DocumentAnswerStrategy` (capability `document_answers`, off by default), and `FallbackStrategy` (must stay last). Reply texts come from `Support\ResponseCatalog` (generic defaults, `responses` overrides per key).
    - **Data tools** (`DataToolStrategy`, capability `data_tools`, off by default): host classes implementing **`Core\Contracts\DataTool`** (`name`, `description`, `argumentSchema`, `authorize`, `execute`) listed in `data_tools`. The interpreter fills `StructuredProblem::$entities` from `understanding.entities` (name => regex, first capture group). The first tool whose arguments were all found runs, only for logged-in users and only after `authorize()` returns true. "Not allowed" and "not found" give the same `tool_not_found` reply; exceptions give `tool_failed` (details go to `report()`). Each call logs one `Smart assistant data tool` line with tool, user id and outcome only. A found `Core\Data\ToolResult` becomes a `key_value` block (via `Resolution::$blocks`, which replaces the text blocks) plus a plain-text `answer_en`, is stored with `data.tool`, and marks the conversation resolved. Tools must return display-safe, masked values. MaddoxPay's tool is `App\SmartAssistant\TransactionStatusTool` (owner and uplines only).
 3. **`Core\Contracts\KnowledgeSource`** is bound to `Knowledge\CompositeKnowledgeSource` over `knowledge.sources` (first source with a result wins; default: text, then keywords). Both default sources read `smart_ai_error_definitions` filtered by `default_service` (package default `general`) and return `Core\Data\KnowledgeEntry` objects.
    - `Knowledge\DatabaseKnowledgeSource` matches when an entry's `key_text` appears inside the user text (case-insensitive); `%`, `_` and `!` are escaped so they match literally. It runs a SQL `LIKE` (`CONCAT`, or `||` on SQLite), then a PHP fallback capped at 5000 rows. It skips keyword entries.
    - `Knowledge\KeywordKnowledgeSource` handles entries with `meta.match = keywords` (seeded with `seed-kb --keywords`, which skips rows without an English answer). `key_text` is a word list; the entry matches when every word occurs in the message in any order, after lower-casing (Unicode letters/digits) and mapping variants via `knowledge.synonyms` (word => variants) on both sides. With `knowledge.typo_tolerance` (default on), an entry word of 5+ Latin letters also matches a message word with the same first letter within 1 edit (2 for words over 8 letters), e.g. "incompleate". The entry with the most words wins, then the oldest. No schema change: the marker lives in the existing `meta` JSON column.
-4. **Guards** (`resolution.guards`) run on the winning resolution: `ClarifyOnceGuard` (same canned reply twice → exit) and `LoopGuard` (same answer hash twice → exit, then forget). Their state goes through `Core\Contracts\ConversationState`, stored in the conversation's `meta.state` (`Persistence\ConversationMetaState`).
+4. **Guards** (`resolution.guards`) run on the winning resolution: `ClarifyOnceGuard` (same canned reply twice → exit) and `LoopGuard` (same answer hash twice → exit, then forget; document answers hash their passage ids instead of the text). Their state goes through `Core\Contracts\ConversationState`, stored in the conversation's `meta.state` (`Persistence\ConversationMetaState`).
 5. Only resolutions with `persist` (KB answer or fallback) add messages to `smart_ai_messages`; canned replies, escalation pointers and exits store no text. Conversation status follows the latest stored outcome (`resolved` / `unresolved`; `escalated` once a ticket is created, and it stays). User text and page paths go through **`Core\Contracts\Redactor`** first (`config('smart-ai-assistant.redactor')`, default `Support\DefaultRedactor`: email, PAN, Aadhaar, phone, and 9–18 digit runs). Answers are stored unredacted. `smart-ai:prune` deletes conversations idle longer than `conversations.retention_days`.
 6. `Http\ResponseSerializer` builds the JSON.
 
@@ -82,10 +88,36 @@ The package depends on things that `composer.json` does not declare:
 - The widget loads no third-party scripts. html2canvas 1.4.1 (MIT), used for screenshot capture, is bundled at `public/js/vendor/html2canvas.min.js`. It is byte-identical to the npm release; its license is next to it.
 
 ### Tables
-These come from one migration:
-- `smart_ai_error_definitions`: the knowledge base, with `service`, `key_text`, `answer_en`, `answer_hi`, and `match_type`.
+These come from the first migration:
+- `smart_ai_error_definitions`: the knowledge base, with `service`, `key_text`, `answer_en`, `answer_hi`, and `meta` (`match_type` is not a column; keyword entries carry `meta.match`).
 - `smart_ai_conversations`
 - `smart_ai_messages`: `sender_type` is one of user, ai, or system.
+
+The second migration (step 12) adds the document tables:
+- `smart_ai_documents`: one row per version (`service`, `title`, `file_name`, `mime`, `size`, sha256 `checksum`, `audience` public/users, `version`, `status` active/archived).
+- `smart_ai_document_chunks`: passages (`position`, `heading` path, `content`), FULLTEXT on heading + content on MySQL/MariaDB only.
+
+### Documents (step 12)
+`Documents\DocumentIngester` (bound in the service provider) picks a **`Core\Contracts\TextExtractor`** by file extension: `DEFAULT_EXTRACTORS` merged with `documents.extractors` (null removes one). Extractors return UTF-8 text with paragraphs separated by blank lines and headings as Markdown `#` lines. `Documents\TextChunker` packs paragraphs up to `documents.chunk_size` characters and never crosses a heading (it splits long paragraphs at sentences, including the Devanagari danda, then words, then mid-word). Extraction happens before the DB transaction, so a failed file leaves the current version active. `PdfTextExtractor` needs the optional `smalot/pdfparser` (LGPL-3.0: `suggest` + `require-dev`, not `require`). Test fixtures (DOCX/XLSX/PDF) are built in code by `tests/Concerns/BuildsDocuments`.
+
+### Document answers (steps 13–14; capability `document_answers`, off by default)
+- **Retrieval:** **`Core\Contracts\PassageSource`** (default `Knowledge\DocumentKnowledgeSource`, configured by `documents.retrieval`) returns `Core\Data\Passage` objects. It is deliberately not a `KnowledgeSource`, because passages are not answers. It filters domain, `status = active` and audiences in SQL. Candidates come from MySQL `MATCH … AGAINST`, or from LIKE when that finds nothing (Devanagari) and on other databases. Each candidate gets a PHP score: the share of the message's search words it contains. Passages below `min_score` (default 0.4) are dropped. Its tests use `DatabaseTruncation` (InnoDB FULLTEXT only sees committed rows) and empty the document tables in `tearDown`.
+- **`Strategies\DocumentAnswerStrategy`** (after `KnowledgeLookupStrategy`, `report_error` only):
+  - Guests only with `documents.answers.guests`, and then `public` documents only.
+  - No passages → null and no LLM call.
+  - `Answering\AnswerCallLimiter` applies daily caps (cache; per user, plus overall).
+  - **`Core\Contracts\AnswerGenerator`** receives the **redacted** question, the passages, and the language label + code.
+  - An answerable result → `answered`, source `document`, plus the `document_sources` line; stored with `data.documents` (id/title/version) and `data.passages`.
+  - Anything else (including exceptions, which go to `report()`) → null, so the fallback replies unchanged.
+- **Drivers** (`ai.driver`):
+  - `null` (default; also used for unknown values such as the host's old `openai` stub) → `NullAnswerGenerator`.
+  - `anthropic` → `AnthropicAnswerGenerator`:
+    - Optional `anthropic-ai/sdk` (`suggest` + `require-dev`; the `php-http/discovery` plugin is disallowed in `composer.json`).
+    - Beta Messages call with a JSON-schema `outputConfig` + `effort`, and `fallbacks: "default"` with beta `server-side-fallback-2026-07-01` (left out when `ai.fallbacks` is null).
+    - Timeout via a Guzzle `transporter`, since the SDK doesn't enforce timeouts.
+    - Any `stop_reason` other than `end_turn`, or bad JSON → null.
+    - Tests pass a fake PSR-18 transporter.
+  - Any other value is used as a class implementing the contract.
 
 ### Frontend (`public/js/`, plain browser globals, no bundler)
 `widget.blade.php` loads the scripts in this order, and **the order matters**: `ui-manager.js` → (`host-compat.js`) → `api-manager.js` → `file-preview.js` → `assistant.js`. The view renders everything host-specific from `config('smart-ai-assistant.widget')` through **`Support\WidgetConfig`**, which fills in defaults key by key within each section (`branding`, `features`, `page_scan`), because Laravel's config merge is only one level deep. Texts are escaped; colours must be hex (otherwise the default is used) and become CSS variables (`--sa-primary`, `--sa-primary-rgb`, ...) in a `<style>` after the stylesheet. The view puts endpoints, flags and `widget.features` / `widget.page_scan` into the `sa-config` JSON block; `ui-manager.js` parses it once into `window.SmartAssistantConfig`.

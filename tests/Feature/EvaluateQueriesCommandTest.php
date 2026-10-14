@@ -3,8 +3,12 @@
 namespace Subodh\SmartAiAssistant\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Subodh\SmartAiAssistant\Core\Contracts\AnswerGenerator;
+use Subodh\SmartAiAssistant\Core\Data\GeneratedAnswer;
 use Subodh\SmartAiAssistant\Evaluation\Evaluator;
 use Subodh\SmartAiAssistant\Models\Conversation;
+use Subodh\SmartAiAssistant\Models\Document;
+use Subodh\SmartAiAssistant\Models\DocumentChunk;
 use Subodh\SmartAiAssistant\Models\ErrorDefinition;
 use Subodh\SmartAiAssistant\Models\Message;
 use Subodh\SmartAiAssistant\Tests\TestCase;
@@ -174,5 +178,40 @@ class EvaluateQueriesCommandTest extends TestCase
     {
         $this->artisan('smart-ai:eval', ['file' => 'nope.csv'])->assertFailed();
         $this->artisan('smart-ai:eval', ['file' => $this->csv([])])->assertFailed();
+    }
+
+    public function test_document_passages_are_counted_without_generating_answers(): void
+    {
+        $document = Document::create([
+            'service' => 'AEPS', 'title' => 'Refund policy', 'file_name' => 'refund.md', 'mime' => 'text/markdown',
+            'checksum' => str_repeat('a', 64), 'audience' => 'users', 'version' => 1, 'status' => 'active',
+        ]);
+        DocumentChunk::create(['document_id' => $document->id, 'position' => 1, 'heading' => null, 'content' => 'Refunds for failed transactions take 5 working days.']);
+
+        // Even with the capability on, eval must never call the LLM
+        config(['smart-ai-assistant.capabilities.document_answers' => true]);
+        $this->app->instance(AnswerGenerator::class, new class implements AnswerGenerator {
+            public function generate(string $question, array $passages, string $language): ?GeneratedAnswer
+            {
+                throw new \LogicException('eval called the answer generator');
+            }
+        });
+
+        $file = $this->csv([['refund for failed transaction'], ['capture timeout'], ['hello'], ['electricity bill not paid']]);
+
+        $this->artisan('smart-ai:eval', ['file' => $file, '--json' => $json = $this->files[] = tempnam(sys_get_temp_dir(), 'eval')])
+            ->expectsOutputToContain('Have a matching document passage (logged-in user): 1 (25.0%)')
+            ->expectsOutputToContain('of which unanswered here, so they would go to document answers: 1 (25.0%)')
+            ->assertSuccessful();
+
+        $summary = json_decode(file_get_contents($json), true);
+        $this->assertEquals(25, $summary['unresolved_with_passages_pct']);
+    }
+
+    public function test_without_documents_retrieval_is_skipped(): void
+    {
+        $this->artisan('smart-ai:eval', ['file' => $this->csv([['refund for failed transaction']])])
+            ->expectsOutputToContain('Have a matching document passage (logged-in user): 0 (0.0%)')
+            ->assertSuccessful();
     }
 }

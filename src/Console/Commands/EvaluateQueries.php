@@ -4,7 +4,10 @@ namespace Subodh\SmartAiAssistant\Console\Commands;
 
 use Illuminate\Console\Command;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\Schema;
+use Subodh\SmartAiAssistant\Core\Contracts\PassageSource;
 use Subodh\SmartAiAssistant\Evaluation\Evaluator;
+use Subodh\SmartAiAssistant\Models\Document;
 
 class EvaluateQueries extends Command
 {
@@ -17,8 +20,15 @@ class EvaluateQueries extends Command
 
     protected $description = 'Replay real queries through the assistant (nothing is stored) and report how many it answers';
 
-    public function handle(Evaluator $evaluator)
+    public function handle()
     {
+        // Never generate document answers here: that would be one LLM call per query.
+        // Retrieval is still measured, when there are documents to search.
+        config(['smart-ai-assistant.capabilities.document_answers' => false]);
+        $evaluator = app()->make(Evaluator::class, [
+            'passages' => $this->hasDocuments() ? app(PassageSource::class) : null,
+        ]);
+
         $file = $this->argument('file');
 
         if (!is_file($file)) {
@@ -74,6 +84,8 @@ class EvaluateQueries extends Command
         $this->line("Category detected: {$report['with_category']} ({$pct($report['with_category'])})");
         $this->line("Contain a data-tool entity (e.g. a reference): {$report['with_entities']} ({$pct($report['with_entities'])})");
         $this->line("  of which unanswered here, but answerable by a data tool for a logged-in user: {$report['unresolved_with_entities']} ({$pct($report['unresolved_with_entities'])})");
+        $this->line("Have a matching document passage (logged-in user): {$report['with_passages']} ({$pct($report['with_passages'])})");
+        $this->line("  of which unanswered here, so they would go to document answers: {$report['unresolved_with_passages']} ({$pct($report['unresolved_with_passages'])})");
 
         $this->newLine();
         $this->table(['Outcome', 'Queries', 'Share'], $this->rows($report['outcomes'], $pct));
@@ -108,6 +120,12 @@ class EvaluateQueries extends Command
                 $report['gaps'],
             ));
         }
+    }
+
+    private function hasDocuments(): bool
+    {
+        // The document tables exist from the step 12 migration on
+        return Schema::hasTable((new Document())->getTable()) && Document::active()->exists();
     }
 
     private function rows(array $counts, callable $pct): array
