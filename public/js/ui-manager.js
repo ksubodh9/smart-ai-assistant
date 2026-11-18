@@ -177,6 +177,9 @@ class UIManager {
 
         this.showWelcomeMessage();
 
+        // SmartAssistant loads the known issues (status notices) on every open
+        document.dispatchEvent(new CustomEvent('smart-assistant:panel-opened'));
+
         // Ensure input is enabled immediately
         this.forceEnableInput();
 
@@ -419,6 +422,42 @@ class UIManager {
 
         // Use the force enable method
         this.forceEnableInput();
+    }
+
+    /**
+     * Show known issues at the top of the panel, above the welcome text.
+     * Texts are server content with **bold** and line breaks only, never HTML.
+     * @param {Array<{id, blocks}>} notices
+     */
+    renderNotices(notices) {
+        let container = document.getElementById('sa-notices');
+        if (!container) {
+            // Older published views have no container
+            const content = this.panel ? this.panel.querySelector('.sa-content') : null;
+            if (!content) return;
+            container = document.createElement('div');
+            container.id = 'sa-notices';
+            container.setAttribute('role', 'status');
+            container.setAttribute('aria-live', 'polite');
+            content.insertBefore(container, content.firstChild);
+        }
+
+        container.replaceChildren();
+
+        (Array.isArray(notices) ? notices : []).forEach(notice => {
+            const text = (Array.isArray(notice?.blocks) ? notice.blocks : [])
+                .filter(block => block && block.type === 'text' && block.text)
+                .map(block => String(block.text))
+                .join('\n\n');
+            if (!text) return;
+
+            const item = document.createElement('div');
+            item.className = 'sa-notice';
+            this.appendFormattedText(item, text);
+            container.appendChild(item);
+        });
+
+        container.hidden = container.childElementCount === 0;
     }
 
     clearChatMessages() {

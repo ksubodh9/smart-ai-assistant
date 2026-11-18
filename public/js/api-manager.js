@@ -13,6 +13,8 @@ class APIManager {
             help: config.endpoints?.help || '/smart-assistant/help',
             message: config.endpoints?.message || '/smart-assistant/message',
             escalate: config.endpoints?.escalate || '/smart-assistant/escalate',
+            // Older published views have no notices endpoint: no notices are shown
+            notices: config.endpoints?.notices || null,
             ticket: '/customer-support/raise/ticket'
         };
     }
@@ -98,6 +100,25 @@ class APIManager {
             conversation_id: this.getConversationId(),
             locale: this.getLocale()
         });
+    }
+
+    /**
+     * Active known issues (GET /smart-assistant/notices), in the reply
+     * language. Any failure gives an empty list: notices are never required.
+     * @returns {Promise<Array<{id, service, blocks}>>}
+     */
+    async fetchNotices() {
+        if (!this.endpoints.notices) return [];
+
+        try {
+            const url = this.endpoints.notices + '?locale=' + encodeURIComponent(this.getLocale());
+            const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!response.ok) return [];
+            const json = await response.json();
+            return Array.isArray(json.notices) ? json.notices : [];
+        } catch (e) {
+            return [];
+        }
     }
 
     async postToAssistant(endpoint, payload) {

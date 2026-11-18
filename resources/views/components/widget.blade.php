@@ -21,6 +21,7 @@
             'help'     => route('smart-assistant.help', [], false),
             'message'  => route('smart-assistant.message', [], false),
             'escalate' => route('smart-assistant.escalate', [], false),
+            'notices'  => route('smart-assistant.notices', [], false),
         ],
         'features' => [
             'server_escalation'      => $saServerEscalation,
@@ -64,7 +65,10 @@
 
         <!-- Content Area -->
         <div class="sa-content">
-            
+
+            <!-- Known issues (status notices), filled when the panel opens -->
+            <div id="sa-notices" role="status" aria-live="polite" hidden></div>
+
             <!-- Welcome Message -->
             <div id="sa-welcome-message">
                 <div class="sa-welcome-icon">👋</div>

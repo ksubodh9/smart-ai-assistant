@@ -33,6 +33,9 @@ class SmartAssistant {
     }
 
     initEventListeners() {
+        // Known issues are fetched each time the panel opens, so they stay current
+        document.addEventListener('smart-assistant:panel-opened', () => this.loadNotices());
+
         // Reply language menu (rendered only when the host offers more than one language)
         const localeSelect = document.getElementById('sa-locale');
         if (localeSelect) {
@@ -63,6 +66,11 @@ class SmartAssistant {
                 this.chatInput.style.height = Math.min(this.chatInput.scrollHeight, 120) + 'px';
             });
         }
+    }
+
+    async loadNotices() {
+        const notices = await this.apiManager.fetchNotices();
+        this.uiManager.renderNotices(notices);
     }
 
     /**

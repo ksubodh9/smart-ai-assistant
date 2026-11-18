@@ -96,6 +96,7 @@ class WidgetComponentTest extends TestCase
             'help'     => '/smart-assistant/help',
             'message'  => '/smart-assistant/message',
             'escalate' => '/smart-assistant/escalate',
+            'notices'  => '/smart-assistant/notices',
         ], $config['endpoints']);
         $this->assertSame(['server_escalation' => true, 'resolve_typed_messages' => false], $config['features']);
         $this->assertSame(WidgetConfig::DEFAULTS['features'], $config['widget']['features']);

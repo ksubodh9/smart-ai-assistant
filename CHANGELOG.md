@@ -4,6 +4,32 @@ All notable changes to the Smart AI Assistant package will be documented in this
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Status notices** (capability `status_notices`, on by default; only acts when a notice is posted):
+  known issues per service (an outage, a slow operator). Post them with
+  `php artisan smart-ai:notice post <CATEGORY> "<text>" [--text=hi:...] [--minutes=N]`
+  (`list`, `end`), or from a host admin screen through `Notices\StatusNoticeManager`.
+  - Shown at the top of the panel each time the widget opens (`GET /smart-assistant/notices`).
+  - A message whose category matches gets the notice as its reply, once per conversation,
+    before any other strategy (also for vague "<service> issue" messages and requests for a
+    human, which keep the "Raise ticket" button). Outcome `notice`: stored, conversation status unchanged.
+  - Notices posted without an end time end after `status_notices.default_minutes` (240).
+  - `smart-ai:eval` turns notices off so results do not depend on live notices.
+  - New table `smart_ai_status_notices`; contract `Core\Contracts\StatusNoticeSource` for other sources.
+
+### Host upgrade steps
+1. `php artisan migrate`
+2. In the published config (merge by hand, never force-publish): add
+   `StatusNoticeStrategy::class` as the **first** entry of `resolution.strategies`,
+   `'status_notices' => env('SMART_AI_STATUS_NOTICES', true)` to `capabilities`, and the
+   `status_notices` block. Optional: Hindi / Hinglish texts for `responses.status_notice`
+   and `responses.status_notice_reply`.
+3. Republish assets (`vendor:publish --tag=smart-ai-assistant-assets --force`) and hard-refresh.
+
+---
+
 ## [2.0.0] - 2025-12-04
 
 ### 🎉 Major Upgrade - Complete UI/UX Overhaul

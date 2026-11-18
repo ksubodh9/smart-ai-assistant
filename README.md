@@ -200,6 +200,17 @@ domain `general`). Publish the config once
     `documents.retrieval.min_score`, `documents.answers` (guests, sources line,
     daily caps) and `responses.document_sources` per language.
 
+16. `status_notices` and `capabilities.status_notices` (or
+    `SMART_AI_STATUS_NOTICES`): known issues per service, posted with
+    `php artisan smart-ai:notice post PAYMENTS "Payments are delayed; we expect
+    them back by 6 PM." --text="hi:..."` and ended with
+    `smart-ai:notice end PAYMENTS`. The service must be a category from
+    `understanding.categories`. Add `StatusNoticeStrategy` as the first entry
+    of `resolution.strategies` in your published config. Notices without
+    `--minutes` end after `status_notices.default_minutes`; `--minutes=0`
+    keeps one until it is ended. Admin screens can call
+    `Notices\StatusNoticeManager::post()` / `end()`.
+
 The config is merged one level deep: a top-level key in your file replaces the
 package's value for that key entirely. The exception is `widget`, whose
 sections keep their defaults for keys you leave out.
@@ -254,6 +265,14 @@ for the same user (or guest session) and while the conversation is active.
 
 After an unresolved reply or a request for a human, `actions` holds
 `{"type": "action", "id": "escalate", "label": "Raise ticket", "confirm": true}`.
+
+### Status notices
+
+`GET /smart-assistant/notices?locale=<code>` returns the active known issues,
+newest first (at most `status_notices.max_shown`):
+`{protocol: 1, notices: [{id, service, blocks: [{type: "text", format: "basic", locale, text}]}]}`.
+The widget calls it each time the panel opens and shows the notices above the
+welcome text. Nothing is stored.
 
 ### Support Request (`features.server_escalation` on)
 ```
@@ -441,6 +460,11 @@ customer text: keep it out of the repository and delete it after use.
       user outside your downline, and a made-up reference, both get "I couldn't
       find that reference in your account" with a "Raise ticket" button; the
       log has one "Smart assistant data tool" line per lookup
+- [ ] Status notices: after `smart-ai:notice post <CATEGORY> "..."`, opening
+      the panel shows the notice above the welcome text (in the language from
+      the header menu); a message in that category gets "This looks related to
+      a known issue…" once, and the next message is answered as usual;
+      `smart-ai:notice end <CATEGORY>` removes it on the next panel open
 - [ ] Mobile responsive works
 - [ ] No console errors
 

@@ -13,6 +13,8 @@ final class Resolution
     public const REFUSE = 'refuse';
     public const ESCALATE = 'escalate';
     public const EXIT = 'exit';
+    // A known issue with the service was shown; the conversation status is left unchanged
+    public const NOTICE = 'notice';
 
     /**
      * @param  string  $source  Wire-format source, e.g. 'kb', 'unknown', 'greeting'

@@ -42,6 +42,12 @@ class ResponseCatalog
         'unknown'          => ['en' => "Sorry, I don't have an answer for that yet. Our support team can look into it for you."],
         'unknown_category' => ['en' => "Sorry, I don't have an answer for this **:category** query yet. Our support team can look into it for you."],
 
+        // A known issue with a service (see smart-ai:notice); :service = its
+        // category tag, :message = the notice text. status_notice is shown when
+        // the widget opens, status_notice_reply answers a message about that service
+        'status_notice'       => ['en' => "**Known issue: :service**\n:message"],
+        'status_notice_reply' => ['en' => "This looks related to a known issue with **:service**:\n:message"],
+
         // The same guidance would be repeated
         'loop_exit'    => ['en' => "I've shared everything I have on this. Our support team can take it from here."],
     ];

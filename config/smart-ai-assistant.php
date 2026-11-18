@@ -153,6 +153,28 @@ return [
         'data_tools' => env('SMART_AI_DATA_TOOLS', false),
         // Answers written by an LLM from ingested documents (needs 'ai' below)
         'document_answers' => env('SMART_AI_DOCUMENT_ANSWERS', false),
+        // Known issues per service (status_notices below): shown when the
+        // widget opens and as the reply to a message about that service
+        'status_notices' => env('SMART_AI_STATUS_NOTICES', true),
+    ],
+
+    // Known issues per service (an outage, a slow operator), posted with
+    // smart-ai:notice or Notices\StatusNoticeManager. A notice's service is a
+    // category tag from understanding.categories; a message in that category
+    // gets the notice once per conversation, before any other answer.
+    'status_notices' => [
+        // Class implementing Subodh\SmartAiAssistant\Core\Contracts\StatusNoticeSource
+        'source' => \Subodh\SmartAiAssistant\Notices\DatabaseStatusNoticeSource::class,
+
+        // A notice posted without an end time ends after this many minutes,
+        // so a forgotten one does not stay up; null = until ended by hand
+        'default_minutes' => 240,
+
+        // Most notices shown when the widget opens (newest first)
+        'max_shown' => 3,
+
+        // Longest notice text per language (characters)
+        'max_length' => 500,
     ],
 
     // Host DataTool classes (Subodh\SmartAiAssistant\Core\Contracts\DataTool),
@@ -165,6 +187,8 @@ return [
     // one that answers wins (keep a fallback last); then every guard runs.
     'resolution' => [
         'strategies' => [
+            // Before the input guard, so "<service> not working" gets the notice too
+            \Subodh\SmartAiAssistant\Strategies\StatusNoticeStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\InputGuardStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\ExplicitEscalationStrategy::class,
             \Subodh\SmartAiAssistant\Strategies\DataToolStrategy::class,

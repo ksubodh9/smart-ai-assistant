@@ -231,6 +231,23 @@
 }
 
 /* ===== WELCOME MESSAGE ===== */
+/* Known issues (status notices), above the welcome text */
+#sa-notices[hidden] {
+    display: none;
+}
+
+.sa-notice {
+    background: #fff7e6;
+    border-left: 4px solid #f0a020;
+    border-radius: 8px;
+    color: #5c3d00;
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    text-align: left;
+}
+
 #sa-welcome-message {
     text-align: center;
     padding: 30px 20px;

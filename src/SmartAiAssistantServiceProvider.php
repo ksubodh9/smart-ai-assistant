@@ -17,6 +17,7 @@ use Subodh\SmartAiAssistant\Core\Contracts\EscalationChannel;
 use Subodh\SmartAiAssistant\Core\Contracts\Interpreter;
 use Subodh\SmartAiAssistant\Core\Contracts\KnowledgeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\Redactor;
+use Subodh\SmartAiAssistant\Core\Contracts\StatusNoticeSource;
 use Subodh\SmartAiAssistant\Core\Contracts\UserContextResolver;
 use Subodh\SmartAiAssistant\Core\Resolution\ResolverPipeline;
 use Subodh\SmartAiAssistant\Documents\DocumentIngester;
@@ -26,6 +27,8 @@ use Subodh\SmartAiAssistant\Knowledge\CompositeKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\DatabaseKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\DocumentKnowledgeSource;
 use Subodh\SmartAiAssistant\Knowledge\KeywordKnowledgeSource;
+use Subodh\SmartAiAssistant\Notices\DatabaseStatusNoticeSource;
+use Subodh\SmartAiAssistant\Notices\StatusNoticeManager;
 use Subodh\SmartAiAssistant\Persistence\EloquentConversationStore;
 use Subodh\SmartAiAssistant\Resolution\StrategyRegistry;
 use Subodh\SmartAiAssistant\Support\DefaultRedactor;
@@ -210,6 +213,20 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
                 : new NullAnswerGenerator();
         });
 
+        // Known issues per service: where active notices come from, and how they are posted
+        $this->app->bind(StatusNoticeSource::class, function ($app) {
+            return $app->make(config('smart-ai-assistant.status_notices.source', DatabaseStatusNoticeSource::class));
+        });
+
+        $this->app->bind(StatusNoticeManager::class, function () {
+            $notices = (array) config('smart-ai-assistant.status_notices', []);
+
+            return new StatusNoticeManager(
+                array_key_exists('default_minutes', $notices) ? ($notices['default_minutes'] === null ? null : (int) $notices['default_minutes']) : 240,
+                (int) ($notices['max_length'] ?? 500),
+            );
+        });
+
         $this->app->bind(AnswerCallLimiter::class, function ($app) {
             $answers = (array) config('smart-ai-assistant.documents.answers', []);
 
@@ -228,6 +245,7 @@ class SmartAiAssistantServiceProvider extends ServiceProvider
                 \Subodh\SmartAiAssistant\Console\Commands\EvaluateQueries::class,
                 \Subodh\SmartAiAssistant\Console\Commands\IngestDocuments::class,
                 \Subodh\SmartAiAssistant\Console\Commands\ManageDocuments::class,
+                \Subodh\SmartAiAssistant\Console\Commands\ManageNotices::class,
             ]);
         }
     }

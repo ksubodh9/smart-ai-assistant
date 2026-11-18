@@ -25,6 +25,8 @@ class EvaluateQueries extends Command
         // Never generate document answers here: that would be one LLM call per query.
         // Retrieval is still measured, when there are documents to search.
         config(['smart-ai-assistant.capabilities.document_answers' => false]);
+        // Live status notices would change results from one run to the next
+        config(['smart-ai-assistant.capabilities.status_notices' => false]);
         $evaluator = app()->make(Evaluator::class, [
             'passages' => $this->hasDocuments() ? app(PassageSource::class) : null,
         ]);

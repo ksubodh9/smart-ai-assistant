@@ -46,7 +46,7 @@ class ResponseSerializer
             'protocol'        => self::PROTOCOL,
             'conversation_id' => $conversationId,
             'blocks'          => $this->blocks($resolution, $locale),
-            'actions'         => $this->actions($resolution, $locale),
+            'actions'         => $this->actions($resolution, $problem, $locale),
             'meta'            => [
                 'source'     => $resolution->source,
                 'input_type' => $inputType,
@@ -85,10 +85,13 @@ class ResponseSerializer
             : [['type' => 'text', 'format' => 'basic', 'locale' => $answer['locale'], 'text' => $answer['text']]];
     }
 
-    private function actions(Resolution $resolution, string $locale): array
+    private function actions(Resolution $resolution, StructuredProblem $problem, string $locale): array
     {
-        if (!in_array($resolution->outcome, self::ESCALATE_AFTER, true)
-            || !config('smart-ai-assistant.capabilities.escalation', true)) {
+        // A user who asked for a human still gets the button after a status notice
+        $offer = in_array($resolution->outcome, self::ESCALATE_AFTER, true)
+            || ($resolution->outcome === Resolution::NOTICE && $problem->intent === StructuredProblem::INTENT_REQUEST_HUMAN);
+
+        if (!$offer || !config('smart-ai-assistant.capabilities.escalation', true)) {
             return [];
         }
 

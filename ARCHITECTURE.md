@@ -397,6 +397,29 @@ rendered as text). `meta.locale` is the reply language.
 exits. The legacy fields stay
 for one release; `SmartAssistant.renderResponse()` prefers blocks.
 
+### Status notices (`status_notices` capability)
+
+Known issues per service, in `smart_ai_status_notices` (`service` = a category
+tag, `messages` = text per language, `starts_at`, `ends_at`, `posted_by`).
+`Notices\StatusNoticeManager` posts and ends them (used by `smart-ai:notice`);
+ending sets `ends_at`, so rows stay as history. A notice without an end time
+ends after `status_notices.default_minutes`.
+
+`Core\Contracts\StatusNoticeSource` (default `Notices\DatabaseStatusNoticeSource`)
+returns the active ones. They are used in two places:
+- `GET /smart-assistant/notices` (`NoticeController`): shown above the welcome
+  text each time the panel opens (`ResponseCatalog` key `status_notice`).
+- `Strategies\StatusNoticeStrategy`, first in `resolution.strategies`: for
+  `report_error`, `vague` and `request_human` messages whose domain matches a
+  notice's service (case-insensitive), it replies with the notice
+  (`status_notice_reply`), outcome `notice`, stored with `data.notices`. The
+  shown ids go to `meta.state`, so each notice is shown once per conversation
+  and later messages reach the other strategies. The conversation status is
+  not changed. After a request for a human the reply keeps the escalate action.
+
+`NoticeFormatter` builds one paragraph per notice and language; a notice with
+no text in a language uses the default language's text.
+
 ### Evaluation (`smart-ai:eval`)
 
 `Evaluation\Evaluator` replays queries through the bound `Interpreter` and

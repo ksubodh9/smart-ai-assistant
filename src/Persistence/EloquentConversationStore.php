@@ -100,7 +100,7 @@ class EloquentConversationStore implements ConversationStore
                 'input_type'       => $inputType,
                 'category'         => $category,
                 'matched_error_id' => $resolution->provenance['knowledge_id'] ?? null,
-            ] + array_intersect_key($resolution->provenance, array_flip(['tool', 'documents', 'passages'])),
+            ] + array_intersect_key($resolution->provenance, array_flip(['tool', 'documents', 'passages', 'notices'])),
         ]);
 
         // An escalated conversation stays escalated
